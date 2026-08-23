@@ -35,9 +35,11 @@ from lfms.app.theme import ACCENT, BORDER, POSITIVE, TEXT_DIM
 from lfms.core.enums import Genre, Mood
 from lfms.core.errors import ValidationError
 from lfms.core.version import APP_NAME, VERSION
+from lfms.exporter import export_item
 from lfms.generator.composer import Composer
 from lfms.generator.plan import GenerationParameters
 from lfms.library import Item, LibraryService
+from lfms.mastering import known_target_presets
 from lfms.provenance import (
     ProvenanceRecord,
     format_duration,
@@ -604,6 +606,22 @@ class ProvenancePage(QWidget):
         self.details.setObjectName("card")
         outer.addWidget(self.details, stretch=1)
 
+        export_box = QGroupBox("Render, master & deliver")
+        export_row = QHBoxLayout(export_box)
+        export_row.addWidget(QLabel("Preset:"))
+        self.preset_combo = QComboBox()
+        for preset_name in known_target_presets():
+            self.preset_combo.addItem(preset_name, preset_name)
+        export_row.addWidget(self.preset_combo)
+        self.export_dir_label = QLabel("No output folder chosen")
+        export_row.addWidget(self.export_dir_label, stretch=1)
+        self.choose_export_dir_button = QPushButton("Choose folder…")
+        export_row.addWidget(self.choose_export_dir_button)
+        self.export_button = QPushButton("Render & export")
+        self.export_button.setObjectName("primary")
+        export_row.addWidget(self.export_button)
+        outer.addWidget(export_box)
+
         actions = QHBoxLayout()
         self.verify_button = QPushButton("Verify fingerprint")
         self.verify_button.setObjectName("primary")
@@ -617,7 +635,10 @@ class ProvenancePage(QWidget):
         self.verify_button.clicked.connect(self._verify_selected)
         self.save_txt_button.clicked.connect(lambda: self._save_certificate("txt"))
         self.save_json_button.clicked.connect(lambda: self._save_certificate("json"))
+        self.choose_export_dir_button.clicked.connect(self._choose_export_dir)
+        self.export_button.clicked.connect(self._on_export_clicked)
         self._current_record: ProvenanceRecord | None = None
+        self._export_dir: Path | None = None
         self.reload_items()
 
     # ------------------------------------------------------------- helpers
@@ -711,6 +732,73 @@ class ProvenancePage(QWidget):
         if self._current_record is None:
             raise ValidationError("no provenance record selected")
         return write_certificate(self._current_record, directory, fmt=fmt)
+
+    # ------------------------------------------------------------- export
+
+    def _choose_export_dir(self) -> None:
+        target_dir = QFileDialog.getExistingDirectory(
+            self, "Choose output folder for rendered audio"
+        )
+        if not target_dir:
+            return
+        self._export_dir = Path(target_dir)
+        self.export_dir_label.setText(str(self._export_dir))
+
+    def _on_export_clicked(self) -> None:
+        if self._export_dir is None:
+            self.window().statusBar().showMessage(
+                "Choose an output folder first.", 5000
+            )
+            return
+        try:
+            outcome = self.run_export(self._export_dir)
+        except (ValidationError, OSError) as exc:
+            self.window().statusBar().showMessage(f"Export failed: {exc}", 8000)
+            return
+        if outcome is not None:
+            self.window().statusBar().showMessage(
+                f"Delivered {outcome.final_path.name} "
+                f"[{outcome.target_name}, QC: {outcome.qc.status}]", 12000
+            )
+
+    def run_export(self, output_dir: Path, *, preset_name: str | None = None):
+        """Render + master + archive the selected item into ``output_dir``.
+
+        Synchronous; used directly by tests and by the click handler.
+        Returns the ExportOutcome or None when nothing is selectable.
+        """
+        item = self._selected_item()
+        if item is None:
+            return None
+        preset = preset_name or self.preset_combo.currentData() or "YOUTUBE"
+        status = self.window().statusBar()
+
+        def progress(fraction: float) -> None:
+            status.showMessage(f"Exporting… {fraction * 100:.0f}%")
+
+        for btn in (
+            self.export_button,
+            self.verify_button,
+            self.save_txt_button,
+            self.save_json_button,
+            self.reload_button,
+        ):
+            btn.setEnabled(False)
+        try:
+            outcome = export_item(
+                self.library, item.id, output_dir, preset=preset,
+                on_progress=progress,
+            )
+        finally:
+            for btn in (
+                self.export_button,
+                self.verify_button,
+                self.save_txt_button,
+                self.save_json_button,
+                self.reload_button,
+            ):
+                btn.setEnabled(True)
+        return outcome
 
 
 class MainWindow(QMainWindow):

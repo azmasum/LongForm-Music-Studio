@@ -16,13 +16,21 @@ All notable changes are documented here. Format based on
 - App: Export page replaced by the provenance center — generated-item
   browser, live lineage summary, verify action, certificate saving.
 
+### Added
+- `lfms.exporter` package: one-call export pipeline — recompose from
+  stored parameters, offline render (~10x realtime), auto-master to
+  preset, QC gates, WAV/FLAC delivery, library registration with tags,
+  provenance certificate next to the delivered file.
+- App: Export page gained the render & deliver section (preset picker,
+  output folder, progress in status bar). The full MVP loop — generate →
+  archive → verify → master → deliver — now works end to end.
+
 ### Known gap (flagged)
-- No offline renderer yet converts a symbolic `Composition` to WAV/MP3;
-  the MixBus only renders stems/sources. Tracked as the top pre-release
-  item in docs/PROVENANCE.md.
+- Export runs synchronously on the GUI thread; moves off-thread with the
+  Phase 11 render queue.
 
 ### Verified
-- 272 tests passing incl. offscreen GUI smoke; ruff clean.
+- 279 tests passing incl. offscreen GUI smoke; ruff clean.
 
 ## [0.8.0] — 2026-08-23 (Phase 8)
 

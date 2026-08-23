@@ -140,6 +140,36 @@ def test_provenance_page_verifies_and_exports(qapp, tmp_path):
     window.library.close()
 
 
+def test_provenance_page_exports_audio(qapp, tmp_path):
+    window = _make_window(tmp_path)
+    window.generate_from_payload(
+        {
+            "seed": 777,
+            "genre": "AMBIENT",
+            "moods": ("CALM",),
+            "duration_sec": 12.0,
+            "intensity": 30.0,
+            "voiceover_safe": True,
+        }
+    )
+    page = window.provenance_page
+    page.reload_items()
+    assert page.item_combo.count() >= 1
+
+    out_dir = tmp_path / "delivery"
+    out_dir.mkdir()
+    outcome = page.run_export(out_dir, preset_name="PODCAST")
+    assert outcome is not None
+    assert outcome.final_path.is_file()
+    assert "[PODCAST]" in outcome.final_path.name
+    assert abs(outcome.master.after.integrated_lufs - (-16.0)) < 1.0
+
+    exported = window.library.get(outcome.library_item_id)
+    assert exported.kind == "AUDIO_FILE"
+    assert exported.path == str(outcome.final_path.resolve())
+    window.library.close()
+
+
 def test_format_time():
     assert format_time(0) == "00:00"
     assert format_time(75.6) == "01:16"

@@ -26,7 +26,8 @@ class VerifyResult:
         return "VERIFIED" if self.ok else "FAILED"
 
 
-def _params_from_payload(payload: dict) -> GenerationParameters:
+def params_from_payload(payload: dict) -> GenerationParameters:
+    """Build validated ``GenerationParameters`` from a stored JSON dict."""
     allowed = set(GenerationParameters.__dataclass_fields__)
     kwargs = {key: value for key, value in payload.items() if key in allowed}
     if not {"seed", "duration_sec", "genre"} <= set(kwargs):
@@ -41,7 +42,7 @@ def _params_from_payload(payload: dict) -> GenerationParameters:
 def verify_parameters(payload: dict, expected_fingerprint: str) -> VerifyResult:
     """Recompose ``payload`` and compare against the recorded fingerprint."""
     try:
-        params = _params_from_payload(payload)
+        params = params_from_payload(payload)
         composition = Composer(params).compose()
     except ValidationError as exc:
         return VerifyResult(False, f"parameters unusable: {exc}", expected_fingerprint)

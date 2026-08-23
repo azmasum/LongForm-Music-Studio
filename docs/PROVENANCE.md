@@ -42,12 +42,27 @@ parameters report why they cannot be verified instead of pretending.
 - Save certificate as TXT or JSON (folder dialog; tests/scripts use
   `save_certificate_to_dir(dir, fmt)` directly).
 
+## Export pipeline (`lfms.exporter`)
+
+`export_item(service, item_id, output_dir, preset=…)` completes the MVP loop:
+
+1. Recompose from the item's stored parameters (`Composer`).
+2. Offline-render the raw mix (`CompositionRenderer`, ~10x realtime).
+3. Auto-master to the chosen preset (YOUTUBE/PODCAST/EBU_R128/
+   BACKGROUND_BED).
+4. Write the delivery file (WAV or FLAC), delete the raw temp file.
+5. Run QC gates on the mastered audio.
+6. Register the export in the library (measurement fields + `export`,
+   `target:*`, `fp-source:*` tags).
+7. Write a provenance certificate next to the delivered file.
+
+The Export page drives this end-to-end with a preset picker and output
+folder; progress reports through the status bar.
+
 ## Honest limitations
 
-- The Export page does not render WAV/MP3 yet: there is no offline
-  renderer that turns a symbolic `Composition` into audio (the Phase 6
-  MixBus renders stems/sources, not compositions). Rendering + mastering
-  hand-off remains the biggest open item before v1.0.0's export promise.
-- PDF export was declared optional and is not implemented.
+- The export runs synchronously on the GUI thread; long renders block
+  the window until Phase 11's render queue moves it off-thread.
+- PDF certificates optional → not implemented.
 - Licensing is provenance-only: LFMS asserts what it generated and how;
   it does not perform third-party content detection.

@@ -29,7 +29,7 @@ video creators. Offline-first, copyright-aware, built for Windows.
 | Mixer & effects (chains, presets, voiceover ducking, offline MixBus) | ✅ Phase 6 done |
 | Mastering & QC (BS.1770 measurement, auto-master presets, QC gates) | ✅ Phase 7 done |
 | Sound library (search/tags/favorites/collections, smart tagging, Library+Mix UI) | ✅ Phase 8 done |
-| Provenance center (certificates TXT/JSON, fingerprint verification) | ✅ Phase 9 done — 272 tests |
+| Provenance center + full export pipeline (render → master → QC → deliver, certificates, verification) | ✅ Phase 9 done — 279 tests |
 | Mastering | ⏳ Phase 7 |
 | Library UI/services | ⏳ Phase 8 |
 | Licensing/provenance certificates | ⏳ Phase 9 |
