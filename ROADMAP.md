@@ -91,7 +91,17 @@ automated tests pass and the documented behavior actually works.
   Export-page UI wiring deferred to Phase 8 (docs/MASTERING.md).
 
 ## Phase 8 — Library services + UI
-- Search/filter/tag/favorites/collections, import analysis, smart tagging.
+- [x] SQLite-backed library: items, tags, favorites, collections with
+      validation + cascade deletes (`lfms.library`)
+- [x] Search/filter (query, tag, favorite, collection, sort), import
+      analysis via soundfile + BS.1770 measurement, smart tags for both
+      generated and imported material
+- [x] App wiring: functional Library page; Generate auto-registers into the
+      library; Mix page upgraded from placeholder to per-track strips
+      (volume/pan/mute/solo as undoable commands)
+- **Exit criteria met:** 260 tests passing incl. offscreen GUI smoke.
+  Deferred honestly: library audio preview, import-from-disk dialog button,
+  effect-chain/ducking UI (docs/LIBRARY.md).
 
 ## Phase 9 — Licensing/provenance center
 - Certificate generation/export (TXT/JSON/PDF-optional), provenance browsing.

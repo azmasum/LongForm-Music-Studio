@@ -3,6 +3,29 @@
 All notable changes are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: semver.
 
+## [0.8.0] — 2026-08-23 (Phase 8)
+
+### Added
+- `lfms.library` package:
+  - SQLite-backed sound library: items (path/title/kind/measurement/
+    generation metadata/notes/favorite), normalized tags, named collections
+    with cascade deletes.
+  - Search & filters: case-insensitive query across title/path/fingerprint/
+    tags, tag filter, favorites-only, collection filter, four sort orders.
+  - Import analysis: soundfile format probe + BS.1770 loudness/true-peak
+    measurement on import (files up to 15 min).
+  - Smart tagging: genre/mood/BPM-bucket/voiceover-safe/energy tags for
+    generated items; level/mono-stereo/length tags for imports.
+- App pages:
+  - Library page: live search, tag combo, favorites toggle, details pane,
+    favorite/delete/collection actions.
+  - Mix page (replaces placeholder): per-track volume/pan/mute/solo strips;
+    edits are undoable `SetTrackPropertyCommand`s.
+  - Generate now auto-registers compositions in the library.
+
+### Verified
+- 260 tests passing including offscreen GUI smoke; ruff clean.
+
 ## [0.7.0] — 2026-08-23 (Phase 7)
 
 ### Added
