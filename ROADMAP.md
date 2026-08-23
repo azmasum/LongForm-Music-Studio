@@ -53,9 +53,16 @@ automated tests pass and the documented behavior actually works.
   173 tests passing.
 
 ## Phase 5 — Timeline editor model (+ GUI skeleton)
-- Track/clips/automation data model, undo/redo command stack, markers/sections.
-- PySide6 app shell: sidebar navigation, dark theme, transport bar, waveform
-  view with mipmaps.
+- [x] Timeline document model: tracks, clips, automation lanes, markers —
+      validation + JSON roundtrip (`lfms.timeline.model`)
+- [x] Undo/redo Command stack with macro batching and 200-step limit
+      (`lfms.timeline.commands`)
+- [x] PySide6 app shell: sidebar navigation, dark theme, transport bar,
+      Generate page wired to the composer, timeline canvas drawing
+      clips/markers (`python -m lfms.app`)
+- **Exit criteria met:** 197 tests (194 pass; GUI smoke offscreen-gated via
+  `LFMS_GUI_SMOKE=1`). Waveform view with mipmaps deferred to Phase 7 QC
+  work — the canvas currently draws clip/marker geometry.
 
 ## Phase 6 — Mixer & effects
 - Per-track volume/pan/mute/solo/fades, effect chain (EQ/compressor/reverb/

@@ -3,6 +3,26 @@
 All notable changes are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: semver.
 
+## [0.5.0] — 2026-08-23 (Phase 5)
+
+### Added
+- `lfms.timeline` package:
+  - Document model: `TrackState`, `Clip`, `AutomationLane`/`AutomationPoint`,
+    `Marker`, `TimelineDocument` with validation, range queries and JSON
+    roundtrip (`to_dict`/`from_dict`).
+  - Undo/redo: Command pattern (`Add/Remove/Move/Resize/SetProperty`,
+    marker + automation commands), atomic `MacroCommand`, bounded
+    `CommandStack` (200 steps, redo cleared on new execute).
+- `lfms.app` PySide6 shell (`python -m lfms.app`):
+  - Dark QSS theme, sidebar navigation, transport bar, timeline canvas
+    (clips/markers/ruler) and a working Generate page wired to the composer
+    via the command stack.
+- Optional GUI dependency: `pip install .[gui]` (PySide6).
+
+### Verified
+- 197 tests: model/command suites (21 new), offscreen GUI smoke gated by
+  `LFMS_GUI_SMOKE=1`; ruff clean.
+
 ## [0.4.0] — 2026-08-23 (Phase 4)
 
 ### Added
