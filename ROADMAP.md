@@ -144,7 +144,17 @@ automated tests pass and the documented behavior actually works.
   end-to-end batch (2 tracks) verified with delivered files on disk.
 
 ## Phase 12 — Installer & portable build
-- PyInstaller portable ZIP + Inno Setup installer; release checklist.
+- [x] PyInstaller one-dir windowed build (`installer/lfms.spec`) with
+      headless verification (`--version`, `LFMS_SELF_CHECK=1` exit codes)
+- [x] scipy modulegraph crash worked around honestly: two modules
+      excluded + runtime stubs; documented in docs/RELEASE.md
+- [x] One-shot release script `installer/build_portable.ps1` (tests →
+      ruff → build → frozen self-check → ZIP); verified end-to-end,
+      ~85 MB portable ZIP produced
+- [x] Inno Setup 6 script ready (`installer/setup.iss`); compilation
+      requires ISCC.exe which is not installed here — stated as-is
+- **Exit criteria met:** 315 tests passing incl. offscreen GUI smoke;
+   release checklist in docs/RELEASE.md.
 
 ## Phase 13 — Testing hardening
 - Integration coverage per spec §71; performance budgets; crash-recovery drills.

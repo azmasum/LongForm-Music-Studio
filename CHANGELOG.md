@@ -3,6 +3,29 @@
 All notable changes are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: semver.
 
+## [0.12.0] — 2026-08-23 (Phase 12)
+
+### Added
+- `installer/` toolchain:
+  - Frozen entry point with headless verification modes (`--version`,
+    `LFMS_SELF_CHECK=1`) so builds assert themselves via exit codes.
+  - PyInstaller spec (windowed one-dir) + regression tests for the
+    entry script and runtime hooks.
+  - `build_portable.ps1`: tests → ruff → build → frozen self-check →
+    `releases/LongFormMusicStudio-<version>-portable.zip` (~85 MB).
+    Verified end-to-end on this machine.
+  - Inno Setup 6 script for the setup.exe (compilation needs ISCC.exe,
+    not installed here — documented honestly).
+- Workaround for a PyInstaller/modulegraph bytecode-scan crash:
+  `scipy.stats` and `scipy.special._ellip_harm_2` excluded from the
+  bundle and stubbed at runtime (`scoreatpercentile` reimplemented via
+  numpy); fully explained in docs/RELEASE.md.
+- docs/RELEASE.md: per-release checklist.
+
+### Verified
+- 315 tests passing incl. offscreen GUI smoke; ruff clean; portable ZIP
+  self-check exits 0.
+
 ## [0.11.0] — 2026-08-23 (Phase 11)
 
 ### Added
