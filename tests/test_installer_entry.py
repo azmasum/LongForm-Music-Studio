@@ -34,6 +34,7 @@ def test_entry_version_flag_prints_app_and_version():
 
 
 def test_entry_self_check_imports_every_package():
+    pytest.importorskip("PySide6")  # self-check imports the GUI stack
     result = _run([], env_extra={"LFMS_SELF_CHECK": "1"})
     assert result.returncode == 0, result.stderr[-400:]
 

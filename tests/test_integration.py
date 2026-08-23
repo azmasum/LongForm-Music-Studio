@@ -36,6 +36,10 @@ def _params(seed=101, duration=8.0) -> GenerationParameters:
 
 @pytest.fixture(scope="module")
 def qapp():
+    try:
+        import PySide6  # noqa: F401
+    except ImportError:
+        pytest.skip("PySide6 not installed; GUI integration test skipped")
     if os.environ.get("LFMS_GUI_SMOKE") == "1":
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtWidgets import QApplication
