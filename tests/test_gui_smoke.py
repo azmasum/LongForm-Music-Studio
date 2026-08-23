@@ -18,6 +18,7 @@ if os.environ.get("LFMS_GUI_SMOKE") == "1":
     from PySide6.QtWidgets import QApplication  # noqa: E402
 
     from lfms.app.main_window import MainWindow, TransportBar, format_time  # noqa: E402
+    from lfms.provenance import verify_item  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -102,6 +103,40 @@ def test_mix_page_edits_are_undoable(qapp, tmp_path):
     window.commands.undo(window.document)
     restored = next(t for t in window.document.tracks if t.track_id == track.track_id)
     assert restored.volume_db == pytest.approx(original_volume)
+    window.library.close()
+
+
+def test_provenance_page_verifies_and_exports(qapp, tmp_path):
+    window = _make_window(tmp_path)
+    window.generate_from_payload(
+        {
+            "seed": 4242,
+            "genre": "LOFI",
+            "moods": ("DREAMY",),
+            "duration_sec": 20.0,
+            "intensity": 35.0,
+        }
+    )
+    page = window.provenance_page
+    page.reload_items()
+    assert page.item_combo.count() == 1
+
+    item = page._selected_item()
+    assert item is not None and item.fingerprint
+
+    page._verify_selected()
+    result = verify_item(item)
+    assert result.ok and result.status == "VERIFIED"
+
+    out_dir = tmp_path / "certs"
+    txt_path = page.save_certificate_to_dir(out_dir, fmt="txt")
+    json_path = page.save_certificate_to_dir(out_dir, fmt="json")
+    assert txt_path.is_file() and json_path.is_file()
+    import json as _json
+
+    payload = _json.loads(json_path.read_text(encoding="utf-8"))
+    assert payload["fingerprint"] == item.fingerprint
+    assert payload["parameters"]["seed"] == 4242
     window.library.close()
 
 

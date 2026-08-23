@@ -104,7 +104,17 @@ automated tests pass and the documented behavior actually works.
   effect-chain/ducking UI (docs/LIBRARY.md).
 
 ## Phase 9 — Licensing/provenance center
-- Certificate generation/export (TXT/JSON/PDF-optional), provenance browsing.
+- [x] Provenance certificates: full lineage record (versions, seed/params,
+      fingerprint, composition facts, loudness/QC, license note) exportable
+      as TXT + JSON (`lfms.provenance`)
+- [x] Verification: recompose stored parameters and compare fingerprints
+      (`verify_item`) — deterministic proof of lineage
+- [x] Export page is now the provenance center: item browser, live lineage
+      summary, verify button, TXT/JSON certificate saving
+- **Exit criteria met:** 272 tests passing incl. offscreen GUI smoke.
+  PDF optional → not implemented. Open gap flagged honestly in
+  docs/PROVENANCE.md: no offline renderer yet turns a symbolic Composition
+  into WAV/MP3 (MixBus only renders stems/sources).
 
 ## Phase 10 — AI Music Director (optional)
 - Prompt → structured parameters via provider adapters; disabled by default;

@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
+    QFileDialog,
     QFormLayout,
     QFrame,
     QGroupBox,
@@ -37,6 +38,13 @@ from lfms.core.version import APP_NAME, VERSION
 from lfms.generator.composer import Composer
 from lfms.generator.plan import GenerationParameters
 from lfms.library import Item, LibraryService
+from lfms.provenance import (
+    ProvenanceRecord,
+    format_duration,
+    record_from_item,
+    verify_item,
+    write_certificate,
+)
 from lfms.timeline import (
     AddClipCommand,
     AddTrackCommand,
@@ -48,9 +56,6 @@ from lfms.timeline import (
 )
 
 SIDEBAR_ITEMS = ("Library", "Generate", "Timeline", "Mix", "Export")
-PLACEHOLDER_TEXTS = {
-    "Export": "Render/export pipeline UI arrives in Phase 9.",
-}
 
 DEFAULT_DB_PATH = Path.home() / ".lfms" / "library.db"
 
@@ -178,22 +183,6 @@ class TimelineCanvas(QWidget):
                         rect_y + self.LANE_HEIGHT - 24,
                         (clip.label or clip.clip_id)[: rect_w // 8],
                     )
-
-
-class PlaceholderPage(QWidget):
-    def __init__(self, title: str, message: str, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(28, 24, 28, 24)
-        heading = QLabel(title)
-        heading.setObjectName("page-title")
-        body = QLabel(message)
-        body.setObjectName("muted")
-        body.setWordWrap(True)
-        layout.addWidget(heading)
-        layout.addSpacing(8)
-        layout.addWidget(body)
-        layout.addStretch(1)
 
 
 class GeneratePage(QWidget):
@@ -586,6 +575,144 @@ class MixPage(QWidget):
         return box
 
 
+class ProvenancePage(QWidget):
+    """Provenance center: browse lineage of generated items, verify
+    fingerprints by recomposition and export TXT/JSON certificates."""
+
+    def __init__(self, library: LibraryService, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.library = library
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(28, 24, 28, 24)
+
+        heading = QLabel("Export & Provenance")
+        heading.setObjectName("page-title")
+        outer.addWidget(heading)
+        outer.addSpacing(10)
+
+        pick_row = QHBoxLayout()
+        pick_row.addWidget(QLabel("Generated item:"))
+        self.item_combo = QComboBox()
+        self.item_combo.currentIndexChanged.connect(self._refresh_view)
+        self.reload_button = QPushButton("Reload list")
+        self.reload_button.clicked.connect(self.reload_items)
+        pick_row.addWidget(self.item_combo, stretch=1)
+        pick_row.addWidget(self.reload_button)
+        outer.addLayout(pick_row)
+
+        self.details = QTextBrowser()
+        self.details.setObjectName("card")
+        outer.addWidget(self.details, stretch=1)
+
+        actions = QHBoxLayout()
+        self.verify_button = QPushButton("Verify fingerprint")
+        self.verify_button.setObjectName("primary")
+        self.save_txt_button = QPushButton("Save certificate (TXT)")
+        self.save_json_button = QPushButton("Save certificate (JSON)")
+        for btn in (self.verify_button, self.save_txt_button, self.save_json_button):
+            actions.addWidget(btn)
+        actions.addStretch(1)
+        outer.addLayout(actions)
+
+        self.verify_button.clicked.connect(self._verify_selected)
+        self.save_txt_button.clicked.connect(lambda: self._save_certificate("txt"))
+        self.save_json_button.clicked.connect(lambda: self._save_certificate("json"))
+        self._current_record: ProvenanceRecord | None = None
+        self.reload_items()
+
+    # ------------------------------------------------------------- helpers
+
+    def reload_items(self) -> None:
+        self.item_combo.blockSignals(True)
+        self.item_combo.clear()
+        self._items_by_id: dict[int, Item] = {}
+        for item in self.library.list_items():
+            if not item.params_json:
+                continue
+            label = f"#{item.id} {item.title}"
+            self.item_combo.addItem(label, item.id)
+            self._items_by_id[item.id] = item
+        self.item_combo.blockSignals(False)
+        self._refresh_view()
+
+    def _selected_item(self) -> Item | None:
+        item_id = self.item_combo.currentData()
+        return self._items_by_id.get(item_id) if item_id is not None else None
+
+    def _refresh_view(self) -> None:
+        item = self._selected_item()
+        if item is None:
+            self._current_record = None
+            self.details.setHtml(
+                "<i>No generated items with parameters found in the library."
+                "<br/>Generate music first — every generation is archived "
+                "here with full provenance.</i>"
+            )
+            return
+        record = record_from_item(item)
+        self._current_record = record
+        params_html = ", ".join(
+            f"<b>{key}</b>={value}" for key, value in sorted(record.parameters.items())
+        )
+        self.details.setHtml(
+            f"<b>{record.title}</b><br/>"
+            f"Fingerprint: <b>{record.fingerprint or '-'}</b><br/>"
+            f"{record.bpm:.0f} BPM - {record.key_name} - "
+            f"{format_duration(record.duration_sec)}<br/>"
+            f"{params_html}<br/><br/>"
+            f"Generator: {record.generator_version} | "
+            f"App: {record.app_version}<br/>"
+            f"License: {record.license_note}"
+        )
+
+    def _verify_selected(self) -> None:
+        item = self._selected_item()
+        if item is None:
+            return
+        result = verify_item(item)
+        mark = "VERIFIED" if result.ok else "FAILED"
+        self.window().statusBar().showMessage(
+            f"Provenance {mark}: {result.message}", 8000
+        )
+        color = "#9ece6a" if result.ok else "#f7768e"
+        self.details.setHtml(
+            self.details.toHtml().replace(
+                "</body>",
+                f"<p style='color:{color};'><b>{mark}</b> — {result.message}"
+                + (
+                    f"<br/>Recomputed: {result.recomputed_fingerprint}"
+                    if result.recomputed_fingerprint
+                    else ""
+                )
+                + "</p></body>",
+            )
+        )
+
+    def _save_certificate(self, fmt: str) -> None:
+        if self._current_record is None:
+            self.window().statusBar().showMessage(
+                "Select a generated item first.", 5000
+            )
+            return
+        target_dir = QFileDialog.getExistingDirectory(
+            self, "Choose certificate folder"
+        )
+        if not target_dir:
+            return
+        try:
+            path = write_certificate(self._current_record, target_dir, fmt=fmt)
+        except (ValueError, OSError) as exc:
+            self.window().statusBar().showMessage(f"Certificate failed: {exc}", 8000)
+            return
+        self.window().statusBar().showMessage(f"Saved {path.name}", 8000)
+
+    def save_certificate_to_dir(self, directory, fmt: str = "txt") -> Path:
+        """Direct save used by tests/scripts; bypasses the folder dialog."""
+        if self._current_record is None:
+            raise ValidationError("no provenance record selected")
+        return write_certificate(self._current_record, directory, fmt=fmt)
+
+
 class MainWindow(QMainWindow):
     def __init__(self, db_path: Path | None = None) -> None:
         super().__init__()
@@ -615,13 +742,14 @@ class MainWindow(QMainWindow):
         timeline_layout.addWidget(timeline_heading)
         timeline_layout.addWidget(self.timeline_canvas, stretch=1)
         self.mix_page = MixPage()
+        self.provenance_page = ProvenancePage(self.library)
 
         self.pages = QStackedWidget()
         self.pages.addWidget(self.library_page)
         self.pages.addWidget(self.generate_page)
         self.pages.addWidget(timeline_page)
         self.pages.addWidget(self.mix_page)
-        self.pages.addWidget(PlaceholderPage("Export", PLACEHOLDER_TEXTS["Export"]))
+        self.pages.addWidget(self.provenance_page)
 
         body = QWidget()
         body_layout = QHBoxLayout(body)

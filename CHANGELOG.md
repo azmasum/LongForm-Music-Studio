@@ -3,6 +3,27 @@
 All notable changes are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: semver.
 
+## [0.9.0] — 2026-08-23 (Phase 9)
+
+### Added
+- `lfms.provenance` package:
+  - Provenance certificates: lineage record (app/generator versions,
+    seed + full parameters, fingerprint, BPM/key/repetition, loudness +
+    QC status, license note) with TXT and JSON export.
+  - Fingerprint verification by recomposition (`verify_item` /
+    `verify_parameters`) — deterministic proof that audio matches its
+    certificate; honest failure reasons when data is missing.
+- App: Export page replaced by the provenance center — generated-item
+  browser, live lineage summary, verify action, certificate saving.
+
+### Known gap (flagged)
+- No offline renderer yet converts a symbolic `Composition` to WAV/MP3;
+  the MixBus only renders stems/sources. Tracked as the top pre-release
+  item in docs/PROVENANCE.md.
+
+### Verified
+- 272 tests passing incl. offscreen GUI smoke; ruff clean.
+
 ## [0.8.0] — 2026-08-23 (Phase 8)
 
 ### Added
