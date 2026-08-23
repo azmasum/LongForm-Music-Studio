@@ -28,10 +28,16 @@ automated tests pass and the documented behavior actually works.
   frames/sample-rate/non-silence/bounded-peak assertions; byte-identical
   reproducibility for identical seeds; measured ~15x realtime render speed.
 
-## Phase 3 — Basic generator
-- Genre/mood/intensity → parameter plan; harmony + motif generation from seed;
-  Quick Generate produces a real audio file.
-- Reproducibility golden test (same seed ⇒ identical output bytes).
+## Phase 3 — Basic generator ✅
+- [x] Genre/mood/intensity → `MusicPlan` (30 genre profiles, mood modifiers)
+- [x] Seeded harmony: diatonic progressions, voice-led pad voicings
+- [x] Seeded melody: motif generation with variation transforms, chord-tone
+      snapping on strong beats
+- [x] Bass / sparkle bells / soft pulse layers; 7 instrument voices
+- [x] Streaming event scheduler + Quick Generate producing real audio files
+- **Exit criteria met:** reproducibility golden test — same seed renders
+  byte-identical output; different seeds differ; 143 tests passing;
+  ~8x realtime render speed.
 
 ## Phase 4 — Long-form arranger
 - Section planner, energy curves (presets + user points), anti-repetition

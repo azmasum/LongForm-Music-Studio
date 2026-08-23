@@ -22,8 +22,8 @@ video creators. Offline-first, copyright-aware, built for Windows.
 | --- | --- |
 | Architecture & repo foundation | ✅ Done |
 | Core: config, portable paths, logging/crash reports, seeds, IDs, SQLite schema + repository, backups | ✅ Implemented & unit-tested |
-| Audio engine (oscillators, filters, ambiences, mixer graph, offline renderer, realtime player) | ✅ Phase 2 done — 112 tests passing |
-| Procedural generator | ⏳ Phase 3 |
+| Audio engine (oscillators, filters, ambiences, mixer graph, offline renderer, realtime player) | ✅ Phase 2 done |
+| Procedural generator (plan → harmony/melody → audio, seed-reproducible) | ✅ Phase 3 done — 143 tests passing |
 | Long-form arranger + anti-repetition | ⏳ Phase 4 |
 | Timeline editor | ⏳ Phase 5 |
 | Mixer & effects | ⏳ Phase 6 |

@@ -3,6 +3,26 @@
 All notable changes are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: semver.
 
+## [0.3.0] — 2026-08-23 (Phase 3)
+
+### Added
+- `lfms.generator` package:
+  - `GenerationParameters` → `MusicPlan` builder: 30 genre profiles, mood
+    modifiers, intensity scaling, seeded BPM/key selection, validation.
+  - Music-theory core: modes, diatonic chord stacking (triads/7ths),
+    voicing builder with rotation-based voice leading, progression pools.
+  - Harmony generator (seeded progressions covering exact duration), melody
+    generator (motifs + variation transforms + chord-tone snapping), bass,
+    sparkle bells and soft pulse layers.
+  - Seven instrument voices (pad/piano/pluck/bell/bass/kick/hat) streaming
+    mono blocks; event scheduler keeps memory flat for hour-long pieces.
+  - `Composer` + `CompositionRenderer`/`quick_generate`: parameters in,
+    rendered audio file out; composition fingerprints (`LFMS-XXXX-XXXX-XXXX`).
+
+### Verified
+- Golden reproducibility: same seed ⇒ byte-identical file; different seeds
+  differ. 143 tests passing overall; ~8x realtime for 5-layer mixes.
+
 ## [0.2.0] — 2026-08-23 (Phase 2)
 
 ### Added
