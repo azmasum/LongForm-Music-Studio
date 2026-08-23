@@ -9,20 +9,18 @@ from dataclasses import replace
 
 import numpy as np
 
-from lfms.core.ids import fingerprint
 from lfms.core.seed import SeedSystem
-from lfms.core.version import GENERATOR_VERSION
 from lfms.generator.events import ChordSegment, Composition, NoteEvent
-from lfms.generator.harmony import HarmonyGenerator
-from lfms.generator.melody import MelodyGenerator
 from lfms.generator.plan import GenerationParameters, MusicPlan, build_plan
 from lfms.generator.theory import voicing_for_chord
 
 
 class PadGenerator:
-    def __init__(self, plan: MusicPlan) -> None:
+    def __init__(self, plan: MusicPlan, *, rng_index: int = 0) -> None:
         self.plan = plan
-        self._rng = np.random.default_rng(SeedSystem(plan.seed).derive("pad"))
+        self._rng = np.random.default_rng(
+            SeedSystem(plan.seed).derive("pad", rng_index)
+        )
 
     def generate(self, chords: list[ChordSegment]) -> list[NoteEvent]:
         events: list[NoteEvent] = []
@@ -67,9 +65,11 @@ class PadGenerator:
 
 
 class BassGenerator:
-    def __init__(self, plan: MusicPlan) -> None:
+    def __init__(self, plan: MusicPlan, *, rng_index: int = 0) -> None:
         self.plan = plan
-        self._rng = np.random.default_rng(SeedSystem(plan.seed).derive("bass"))
+        self._rng = np.random.default_rng(
+            SeedSystem(plan.seed).derive("bass", rng_index)
+        )
 
     def generate(self, chords: list[ChordSegment]) -> list[NoteEvent]:
         events: list[NoteEvent] = []
@@ -109,9 +109,11 @@ class BassGenerator:
 class SparkleGenerator:
     """Rare high bells on chord tops; adds air without demanding attention."""
 
-    def __init__(self, plan: MusicPlan) -> None:
+    def __init__(self, plan: MusicPlan, *, rng_index: int = 0) -> None:
         self.plan = plan
-        self._rng = np.random.default_rng(SeedSystem(plan.seed).derive("sparkle"))
+        self._rng = np.random.default_rng(
+            SeedSystem(plan.seed).derive("sparkle", rng_index)
+        )
 
     def generate(self, chords: list[ChordSegment]) -> list[NoteEvent]:
         probability = 0.18 * self.plan.density + 0.04
@@ -144,21 +146,31 @@ class SparkleGenerator:
 class PulseGenerator:
     """Soft kick/hat pulse; only appears once intensity/pulse_level rises."""
 
-    def __init__(self, plan: MusicPlan) -> None:
+    def __init__(self, plan: MusicPlan, *, rng_index: int = 0) -> None:
         self.plan = plan
-        self._rng = np.random.default_rng(SeedSystem(plan.seed).derive("pulse"))
+        self._rng = np.random.default_rng(
+            SeedSystem(plan.seed).derive("pulse", rng_index)
+        )
 
-    def generate(self) -> list[NoteEvent]:
+    def generate(
+        self,
+        *,
+        start_sec: float = 0.0,
+        end_sec: float | None = None,
+    ) -> list[NoteEvent]:
         level = self.plan.pulse_level
         if level < 0.03:
             return []
+        limit = self.plan.duration_sec if end_sec is None else end_sec
         events: list[NoteEvent] = []
         jitter = 0.008
         beat = self.plan.beat_sec
-        time = 0.0
-        while time < self.plan.duration_sec - 1e-9:
+        bar_sec = 4 * beat
+        first_bar = int(np.floor(start_sec / bar_sec + 1e-9))
+        time = first_bar * bar_sec
+        while time < limit - 1e-9:
             kick_times = [time]
-            if level > 0.40 and time + 2 * beat < self.plan.duration_sec:
+            if level > 0.40 and time + 2 * beat < limit:
                 kick_times.append(time + 2 * beat)
             for kick_start in kick_times:
                 events.append(
@@ -174,8 +186,8 @@ class PulseGenerator:
             if level > 0.10:
                 hat_step = beat / 2.0
                 hat_time = time
-                while hat_time < time + 4 * beat - 1e-9:
-                    if float(self._rng.random()) < 0.85 and hat_time < self.plan.duration_sec:
+                while hat_time < time + bar_sec - 1e-9:
+                    if float(self._rng.random()) < 0.85 and hat_time < limit:
                         events.append(
                             NoteEvent(
                                 start_sec=max(0.0, hat_time + float(self._rng.uniform(-jitter, jitter))),
@@ -187,8 +199,12 @@ class PulseGenerator:
                             )
                         )
                     hat_time += hat_step
-            time += 4 * beat
-        return [event for event in events if event.start_sec < self.plan.duration_sec]
+            time += bar_sec
+        return [
+            event
+            for event in events
+            if event.start_sec >= start_sec and event.start_sec < limit
+        ]
 
 
 def _clip_events(events: list[NoteEvent], duration_sec: float) -> list[NoteEvent]:
@@ -213,35 +229,6 @@ class Composer:
         self.plan = plan or build_plan(params)
 
     def compose(self) -> Composition:
-        plan = self.plan
-        chords = HarmonyGenerator(plan).generate()
-        melody = MelodyGenerator(plan).generate(chords)
-        pads = PadGenerator(plan).generate(chords)
-        bass = BassGenerator(plan).generate(chords)
-        sparkle = SparkleGenerator(plan).generate(chords)
-        pulse = PulseGenerator(plan).generate()
+        from lfms.arranger.arranger import Arranger
 
-        roles: dict[str, list[NoteEvent]] = {}
-        for name, track_events in (
-            ("MELODY", melody),
-            ("PAD", pads),
-            ("BASS", bass),
-            ("SPARKLE", sparkle),
-            ("PULSE", pulse),
-        ):
-            clipped = _clip_events(track_events, plan.duration_sec)
-            if clipped:
-                roles[name] = clipped
-
-        composition_fingerprint = fingerprint(
-            ["CMP", GENERATOR_VERSION, plan.fingerprint]
-        )
-        composition = Composition(
-            plan_fingerprint=plan.fingerprint,
-            duration_sec=plan.duration_sec,
-            chords=chords,
-            roles=roles,
-            fingerprint=composition_fingerprint,
-            generator_version=GENERATOR_VERSION,
-        )
-        return composition
+        return Arranger(self.params, self.plan).arrange()

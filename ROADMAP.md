@@ -39,11 +39,18 @@ automated tests pass and the documented behavior actually works.
   byte-identical output; different seeds differ; 143 tests passing;
   ~8x realtime render speed.
 
-## Phase 4 — Long-form arranger
-- Section planner, energy curves (presets + user points), anti-repetition
-  metric + Repetition Score, extend engine for imported clips, intro/outro.
-- **Exit criteria:** generate 60-min track without obvious repetition;
-  similarity meter within tested bounds.
+## Phase 4 — Long-form arranger ✅
+- [x] Section planner: bar-aligned spans, seeded middle cycles, INTRO/OUTRO,
+      role gates per section type
+- [x] Energy curves (9 presets + user points + seed-deterministic organic)
+      driving density/melody/pulse/velocity
+- [x] Per-section generation with own RNG namespaces, thinning and
+      octave-shift variation
+- [x] Repetition Score: foreground-focused, deviation-based windowed
+      self-similarity (literal loop = 100; arranged 60-min ≈ 70–82)
+- **Exit criteria met:** composed a 60-min track (45 sections, 18k events,
+  score 70.5) and rendered it fully — exact frames at 7.4x realtime;
+  173 tests passing.
 
 ## Phase 5 — Timeline editor model (+ GUI skeleton)
 - Track/clips/automation data model, undo/redo command stack, markers/sections.

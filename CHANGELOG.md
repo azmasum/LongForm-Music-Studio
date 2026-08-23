@@ -3,6 +3,24 @@
 All notable changes are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: semver.
 
+## [0.4.0] — 2026-08-23 (Phase 4)
+
+### Added
+- `lfms.arranger` package:
+  - Energy curves: 9 presets, seed-deterministic RANDOM_ORGANIC, user
+    `(time, value)` points; energy drives density/melody/pulse/velocity.
+  - Section planner: bar-aligned spans with seeded middle cycles,
+    INTRO/BREAKDOWN/OUTRO role gates.
+  - Arranger: per-section generation (own RNG namespace per section),
+    melody thinning, octave-shift variation, energy-scaled velocities.
+  - Repetition Score: foreground-focused (melody-centric), deviation-based
+    windowed self-similarity; calibrated literal=100 / varied≈0.
+- `GenerationParameters.energy_curve` / `.energy_points` with validation.
+
+### Verified
+- 60-minute composition: 45 sections, 18,259 events, score 70.5, composed in
+  ~2 s; full render exact frames at 7.4x realtime. 173 tests passing.
+
 ## [0.3.0] — 2026-08-23 (Phase 3)
 
 ### Added

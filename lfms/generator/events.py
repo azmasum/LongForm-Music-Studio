@@ -45,6 +45,9 @@ class Composition:
     voiceover_safe: bool = False
     bpm: int = 90
     key_name: str = ""
+    sections: list = field(default_factory=list)
+    repetition_score: float | None = None
+    energy_curve_name: str = ""
 
     def events(self) -> list[NoteEvent]:
         merged = [event for track in self.roles.values() for event in track]

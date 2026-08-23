@@ -105,6 +105,8 @@ class GenerationParameters:
     key_mode: str | None = None
     sample_rate: int = DEFAULT_SAMPLE_RATE
     voiceover_safe: bool = False
+    energy_curve: str | None = None
+    energy_points: tuple[tuple[float, float], ...] | None = None
 
     def validate(self) -> None:
         if self.genre not in _GENRE_PROFILES:
@@ -128,6 +130,13 @@ class GenerationParameters:
             raise ValidationError(f"invalid key_mode {self.key_mode!r}")
         if int(self.sample_rate) not in (22050, 32000, 44100, 48000, 88200, 96000):
             raise ValidationError(f"unsupported sample_rate {self.sample_rate}")
+        if self.energy_curve is not None:
+            from lfms.arranger.energy import known_energy_presets
+
+            if self.energy_curve not in known_energy_presets():
+                raise ValidationError(
+                    f"unknown energy_curve {self.energy_curve!r}"
+                )
         try:
             int(self.seed)
         except (TypeError, ValueError) as exc:

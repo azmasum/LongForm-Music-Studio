@@ -47,9 +47,11 @@ def rhythm_pool(density: float) -> list[tuple[float, ...]]:
 
 
 class MelodyGenerator:
-    def __init__(self, plan: MusicPlan) -> None:
+    def __init__(self, plan: MusicPlan, *, rng_index: int = 0) -> None:
         self.plan = plan
-        self._rng = np.random.default_rng(SeedSystem(plan.seed).derive("melody"))
+        self._rng = np.random.default_rng(
+            SeedSystem(plan.seed).derive("melody", rng_index)
+        )
         self._scale = scale_pitch_classes(plan.key_root_pc, plan.key_mode)
 
     def _scale_midi(self, degree: int) -> int:

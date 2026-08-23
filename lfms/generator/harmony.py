@@ -10,9 +10,11 @@ from lfms.generator.theory import chord_pitch_classes, progression_pool_for_mode
 
 
 class HarmonyGenerator:
-    def __init__(self, plan: MusicPlan) -> None:
+    def __init__(self, plan: MusicPlan, *, rng_index: int = 0) -> None:
         self.plan = plan
-        self._rng = np.random.default_rng(SeedSystem(plan.seed).derive("harmony"))
+        self._rng = np.random.default_rng(
+            SeedSystem(plan.seed).derive("harmony", rng_index)
+        )
 
     def generate(self) -> list[ChordSegment]:
         pool = progression_pool_for_mode(self.plan.key_mode)

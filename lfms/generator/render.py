@@ -87,14 +87,7 @@ def quick_generate(
     on_progress: Callable[[float], None] | None = None,
 ) -> tuple[Composition, RenderResult]:
     """Compose from parameters and render a real audio file in one call."""
-    composer = Composer(params)
-    composition = composer.compose()
-    composition.seed = composer.plan.seed
-    composition.sample_rate = composer.plan.sample_rate
-    composition.brightness_hz = composer.plan.brightness_hz
-    composition.voiceover_safe = composer.plan.voiceover_safe
-    composition.bpm = composer.plan.bpm
-    composition.key_name = composer.plan.key_name
+    composition = Composer(params).compose()
     renderer = CompositionRenderer(composition, master_volume_db=master_volume_db)
     result = renderer.render(
         destination,
