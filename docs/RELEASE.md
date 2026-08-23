@@ -74,26 +74,27 @@ headlessly (`QT_QPA_PLATFORM=offscreen` + `QWidget.grab()`), writing
 `docs/screenshots/0N-<page>.png`. These are real renders of the running app,
 not mockups.
 
-## Publishing the GitHub release (manual — no remote configured here)
+## Publishing to GitHub (done for v1.0.0)
 
-This repository was developed locally; no git remote is configured on this
-machine, so the actual publish could not be performed here. On a machine with
-push access:
+Published on 2026-08-23:
+
+- Repo: <https://github.com/azmasum/LongForm-Music-Studio>
+- Release: <https://github.com/azmasum/LongForm-Music-Studio/releases/tag/v1.0.0>
+  (attaches `LongFormMusicStudio-1.0.0-portable.zip`, ~85 MB)
+- CI: GitHub Actions runs the full suite on every push/PR —
+  windows-latest + ubuntu-latest × Python 3.10/3.12, GUI tests included
+  via Qt offscreen (Linux runners get `libegl1 libgl1 libxkbcommon0
+  libdbus-1-3 libfontconfig1`; see `.github/workflows/ci.yml`)
+
+Steps actually used (via `gh` CLI):
 
 ```powershell
-git remote add origin https://github.com/<org>/LongForm-Music-Studio.git
-git push -u origin main
-git tag -a v1.0.0 -m "LFMS 1.0.0 — first stable release"
+gh repo create LongForm-Music-Studio --public --source . --remote origin --push
+git tag -a v1.0.0 -m "LFMS 1.0.0 - first stable release"
 git push origin v1.0.0
+gh release create v1.0.0 releases\LongFormMusicStudio-1.0.0-portable.zip `
+    --title "LFMS 1.0.0 - first stable release" --notes-file release-notes.md
 ```
 
-Then on GitHub → Releases → **Draft a new release**:
-
-1. Choose tag `v1.0.0`; title `LFMS 1.0.0`.
-2. Paste the `[1.0.0]` section of [CHANGELOG.md](../CHANGELOG.md) as notes.
-3. Attach `releases\LongFormMusicStudio-1.0.0-portable.zip`
-   (~85 MB; SHA256 it first: `Get-FileHash <zip> -Algorithm SHA256`).
-4. Optionally attach `LongFormMusicStudio-1.0.0-setup.exe` if compiled on a
-   machine with Inno Setup.
-5. Publish, then verify the download by unzipping on a clean machine and
-   running `LongFormMusicStudio.exe --version`.
+For future releases repeat only: bump version → changelog → tests/ruff →
+`installer\build_portable.ps1` → tag → `gh release create`.

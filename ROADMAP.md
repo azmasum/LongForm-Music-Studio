@@ -193,9 +193,10 @@ automated tests pass and the documented behavior actually works.
 - [x] Changelog complete 0.x → [1.0.0]; per-release checklist and manual
       GitHub publish steps documented in docs/RELEASE.md
 - **Exit criteria met:** docs finalized, screenshots, release artifacts,
-   changelog. Note stated honestly: the actual GitHub publish (push, tag,
-   release upload) needs a remote/push access not present on this machine —
-   exact steps written in docs/RELEASE.md.
+   changelog. Published: repo + v1.0.0 release live at
+   github.com/azmasum/LongForm-Music-Studio with the portable ZIP attached;
+   GitHub Actions CI green on all four OS×Python jobs (full suite incl.
+   offscreen GUI).
 
 ## Success criteria mapping (spec §99)
 The MVP loop (create project → choose genre/mood/duration → generate → preview
