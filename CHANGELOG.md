@@ -3,6 +3,31 @@
 All notable changes are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: semver.
 
+## [0.7.0] — 2026-08-23 (Phase 7)
+
+### Added
+- `lfms.mastering` package:
+  - BS.1770-4 measurement: K-weighted gated integrated loudness,
+    momentary/short-term maxima, 4x-oversampled true peak, sample peak,
+    RMS; parametric filter coefficients valid at any sample rate
+    (verified against the published 48 kHz tables).
+  - Auto-master presets: YOUTUBE (-14 LUFS / -1 dBTP), PODCAST, EBU_R128,
+    BACKGROUND_BED; look-ahead true-peak limiter (oversampled gain curve,
+    minimum-filter look-ahead + one-pole release).
+  - `auto_master`: fresh-candidate secant search — stable on sparse peaky
+    material, stops honestly at the physical loudness ceiling.
+  - QC gates (`run_qc`): duration, true peak, loudness range, DC offset,
+    clipping, silence fraction, stereo balance -> READY/WARNING report with
+    serializable checks for Phase 9 certificates.
+
+### Fixed
+- Mastering convergence: iterative re-limiting of already-limited audio
+  could diverge downward on burst-heavy material; candidates are now always
+  built fresh from the source.
+
+### Verified
+- 240 tests passing (19 new mastering tests); ruff clean.
+
 ## [0.6.0] — 2026-08-23 (Phase 6)
 
 ### Added

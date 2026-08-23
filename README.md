@@ -26,7 +26,8 @@ video creators. Offline-first, copyright-aware, built for Windows.
 | Procedural generator (plan → harmony/melody → audio, seed-reproducible) | ✅ Phase 3 done |
 | Long-form arranger (sections, energy curves, repetition score) | ✅ Phase 4 done |
 | Timeline model + undo/redo + PySide6 app shell (`python -m lfms.app`) | ✅ Phase 5 done |
-| Mixer & effects (chains, presets, voiceover ducking, offline MixBus) | ✅ Phase 6 done — 221 tests, ~45x realtime mix |
+| Mixer & effects (chains, presets, voiceover ducking, offline MixBus) | ✅ Phase 6 done |
+| Mastering & QC (BS.1770 measurement, auto-master presets, QC gates) | ✅ Phase 7 done — 240 tests |
 | Mastering | ⏳ Phase 7 |
 | Library UI/services | ⏳ Phase 8 |
 | Licensing/provenance certificates | ⏳ Phase 9 |

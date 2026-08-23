@@ -78,8 +78,17 @@ automated tests pass and the documented behavior actually works.
   until Phase 8 (documented in docs/MIXER.md).
 
 ## Phase 7 — Mastering & QC
-- LUFS/true-peak/RMS measurement, auto-master presets (YouTube etc.), QC
-  report (READY/WARNING) before export.
+- [x] Measurement: BS.1770-4 K-weighted integrated/momentary/short-term
+      loudness, gated, any sample rate; oversampled true peak, RMS
+      (`lfms.mastering.measure`)
+- [x] Auto-master presets (YouTube/PODCAST/EBU_R128/BACKGROUND_BED) with
+      look-ahead true-peak limiter and stable secant convergence
+- [x] QC report before export: peak/loudness/DC/clipping/silence/balance
+      gates -> READY/WARNING (`lfms.mastering.qc`)
+- **Exit criteria met:** reference sine anchors match the standard's filter
+  tables; limiter never exceeds ceiling; sparse material that physically
+  cannot reach target stops honestly (documented); 240 tests passing.
+  Export-page UI wiring deferred to Phase 8 (docs/MASTERING.md).
 
 ## Phase 8 — Library services + UI
 - Search/filter/tag/favorites/collections, import analysis, smart tagging.
