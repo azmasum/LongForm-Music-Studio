@@ -46,13 +46,17 @@ produces `releases\LongFormMusicStudio-<version>-portable.zip`
 
 ## Installer (Inno Setup)
 
-The `.iss` script is ready but **compiling it requires Inno Setup 6
-(ISCC.exe)**, which is not installed on this machine — do not claim an
-installer was built without running ISCC. On a machine with Inno Setup:
+Inno Setup 6.7.3 is installed on this machine and the installer was
+compiled successfully for v1.0.0:
 
-1. Run the portable build first (it fills `dist/`).
-2. `ISCC.exe installer\setup.iss`
-3. Result: `releases\LongFormMusicStudio-<version>-setup.exe`.
+```
+ISCC.exe installer\setup.iss
+-> releases\LongFormMusicStudio-<version>-setup.exe (~54 MB)
+```
+
+The frozen exe carries a proper Windows version resource (embedded by
+`installer/lfms.spec` from `lfms.core.version`, single source of truth);
+setup.iss reads the version from it via `GetVersionNumbersString`.
 
 ## Release checklist (per release)
 

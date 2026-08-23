@@ -1,9 +1,58 @@
 # PyInstaller spec for the LFMS portable build.
 # Build from the repo root:  pyinstaller installer\lfms.spec --noconfirm
 import os
+import sys
 
 block_cipher = None
 ROOT = os.path.abspath(SPECPATH + os.sep + "..")
+
+# Embed a real Windows version resource (Explorer properties, Inno Setup's
+# GetVersionNumbersString) from the single source of truth in lfms.core.
+sys.path.insert(0, ROOT)
+from PyInstaller.utils.win32.versioninfo import (  # noqa: E402
+    FixedFileInfo,
+    StringFileInfo,
+    StringStruct,
+    StringTable,
+    VarFileInfo,
+    VarStruct,
+    VSVersionInfo,
+)
+
+from lfms.core.version import APP_NAME, ORGANIZATION, VERSION  # noqa: E402
+
+_parts = [int(x) for x in VERSION.split(".")] + [0] * (4 - len(VERSION.split(".")))
+_filevers = tuple(_parts[:4])
+version_resource = VSVersionInfo(
+    ffi=FixedFileInfo(
+        filevers=_filevers,
+        prodvers=_filevers,
+        mask=0x3F,
+        flags=0x0,
+        OS=0x40004,
+        fileType=0x1,
+        subtype=0x0,
+        date=(0, 0),
+    ),
+    kids=[
+        StringFileInfo(
+            [
+                StringTable(
+                    "040904B0",
+                    [
+                        StringStruct("CompanyName", ORGANIZATION),
+                        StringStruct("FileDescription", APP_NAME),
+                        StringStruct("FileVersion", VERSION),
+                        StringStruct("ProductName", APP_NAME),
+                        StringStruct("ProductVersion", VERSION),
+                        StringStruct("OriginalFilename", "LongFormMusicStudio.exe"),
+                    ],
+                )
+            ]
+        ),
+        VarFileInfo([VarStruct("Translation", [1033, 1200])]),
+    ],
+)
 
 a = Analysis(
     [os.path.join(ROOT, "installer", "entry.py")],
@@ -61,6 +110,7 @@ exe = EXE(
     strip=False,
     upx=False,
     console=False,
+    version=version_resource,
 )
 coll = COLLECT(
     exe,

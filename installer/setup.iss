@@ -4,7 +4,10 @@
 ; Produces releases\LongFormMusicStudio-<version>-setup.exe
 
 #define MyAppName "LongForm Music Studio"
-#define MyAppVersion GetVersionNumbersString("..\dist\LongFormMusicStudio\LongFormMusicStudio.exe")
+; VERSION is always three-part (X.Y.Z), so the fixed-fileversion string
+; returned here always carries exactly one trailing ".0" - trim it.
+#define MyAppVersionFull GetVersionNumbersString("..\dist\LongFormMusicStudio\LongFormMusicStudio.exe")
+#define MyAppVersion Copy(MyAppVersionFull, 1, Len(MyAppVersionFull) - 2)
 #define MyAppExeName "LongFormMusicStudio.exe"
 
 [Setup]
