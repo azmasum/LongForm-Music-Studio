@@ -156,8 +156,28 @@ automated tests pass and the documented behavior actually works.
 - **Exit criteria met:** 315 tests passing incl. offscreen GUI smoke;
    release checklist in docs/RELEASE.md.
 
-## Phase 13 — Testing hardening
-- Integration coverage per spec §71; performance budgets; crash-recovery drills.
+## Phase 13 — Testing hardening ✅
+- [x] Integration coverage per spec §71: full MVP loop (params → compose →
+      export/master/QC → library → certificate → verify), director prompt →
+      delivered preset hit, 3-track batch with unique fingerprints,
+      timeline edit (undo/redo) then export, tampered-parameters forgery
+      drill, project round-trip, offscreen GUI full session
+      (generate → verify → export → batch job)
+- [x] Performance budgets with generous CI margins: loudness measure ≥20x
+      realtime (measured ~55x), MixBus ≥15x (~45x), auto_master 60s ≤25s
+      (~12s), offline render ≥3x realtime, tracemalloc memory ceiling for a
+      streamed 45s render
+- [x] Crash-recovery drills: corrupt/truncated audio rejected as clean
+      ValidationError, damaged project JSON raises LFMSError, half-written
+      project recovered from BackupManager rotation, uncommitted SQLite
+      write rolled back after simulated crash, corrupt params_json verifies
+      FAILED honestly instead of crashing, RenderQueue continues after a
+      mid-batch failure + retry succeeds
+- [x] Hardening fixes: `TimelineDocument.from_dict` raises ProjectFileError
+      on non-dict/malformed payloads; `import_audio_file` wraps libsndfile
+      decode failures into ValidationError with actionable messages
+- **Exit criteria met:** integration coverage per spec §71, performance
+   budgets, crash-recovery drills — 342 tests passing.
 
 ## Phase 14 — GitHub release v1.0.0
 - Docs finalized, screenshots, release artifacts, changelog.

@@ -33,12 +33,7 @@ video creators. Offline-first, copyright-aware, built for Windows.
 | AI Music Director (optional, off by default: offline interpreter + local Ollama adapter, consent-gated) | ✅ Phase 10 done — 302 tests |
 | Batch render queue (unique seeds, pause/cancel/retry/reorder, off-thread worker, perf monitor) | ✅ Phase 11 done — 312 tests |
 | Installer & portable build (PyInstaller ZIP verified, Inno Setup script ready, release checklist) | ✅ Phase 12 done — 315 tests |
-| Mastering | ⏳ Phase 7 |
-| Library UI/services | ⏳ Phase 8 |
-| Licensing/provenance certificates | ⏳ Phase 9 |
-| AI Music Director (optional, adapter-based) | ⏳ Phase 10 |
-| Batch rendering | ⏳ Phase 11 |
-| Windows installer/portable build | ⏳ Phase 12 |
+| Testing hardening (integration E2E per spec §71, performance budgets, crash-recovery drills) | ✅ Phase 13 done — 342 tests |
 
 ## Copyright stance
 

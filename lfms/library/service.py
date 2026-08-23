@@ -4,6 +4,7 @@ The service is the single access point used by tests and the GUI. All
 mutating methods validate input and raise ``ValidationError``; reads are
 forgiving. The database is created on first open (parents auto-created).
 """
+
 from __future__ import annotations
 
 import functools
@@ -211,9 +212,7 @@ class LibraryService:
         return self.get(cursor.lastrowid)
 
     def _touch(self, item_id: int) -> None:
-        self._conn.execute(
-            "UPDATE items SET updated_at=? WHERE id=?", (_now(), item_id)
-        )
+        self._conn.execute("UPDATE items SET updated_at=? WHERE id=?", (_now(), item_id))
 
     # ------------------------------------------------------------ mutations
 
@@ -227,9 +226,7 @@ class LibraryService:
     ) -> Item:
         clean = self._validate_title(title)
         if path is not None:
-            existing = self._conn.execute(
-                "SELECT id FROM items WHERE path=?", (path,)
-            ).fetchone()
+            existing = self._conn.execute("SELECT id FROM items WHERE path=?", (path,)).fetchone()
             if existing is not None:
                 raise ValidationError(f"path already in library: {path}")
         fields = {
@@ -298,11 +295,24 @@ class LibraryService:
         file_path = Path(path)
         if not file_path.is_file():
             raise ValidationError(f"audio file not found: {file_path}")
-        info = sf.info(str(file_path))
+        try:
+            info = sf.info(str(file_path))
+        except sf.LibsndfileError as exc:
+            raise ValidationError(
+                f"not a readable audio file: {file_path}",
+                technical=str(exc),
+                suggestion="check the file is a valid WAV/FLAC/OGG",
+            ) from exc
         integrated: float | None = None
         peak: float | None = None
         if info.duration <= _LOUDNESS_MEASURE_LIMIT_SEC:
-            data, sr = sf.read(str(file_path), always_2d=True, dtype="float32")
+            try:
+                data, sr = sf.read(str(file_path), always_2d=True, dtype="float32")
+            except (sf.LibsndfileError, RuntimeError) as exc:
+                raise ValidationError(
+                    f"audio file could not be decoded: {file_path}",
+                    technical=str(exc),
+                ) from exc
             measurement = measure(data.T.astype(np.float32), int(info.samplerate))
             integrated = measurement.integrated_lufs
             peak = measurement.true_peak_dbtp
@@ -317,9 +327,7 @@ class LibraryService:
             integrated_lufs=integrated,
             true_peak_dbtp=peak,
         )
-        for tag in smart_tags_for_measurement(
-            integrated, int(info.channels), float(info.duration)
-        ):
+        for tag in smart_tags_for_measurement(integrated, int(info.channels), float(info.duration)):
             self.add_tag(item.id, tag)
         return self.get(item.id)
 
@@ -372,21 +380,15 @@ class LibraryService:
         clean = str(name).strip()
         if not clean:
             raise ValidationError("collection name must not be empty")
-        exists = self._conn.execute(
-            "SELECT id FROM collections WHERE name=?", (clean,)
-        ).fetchone()
+        exists = self._conn.execute("SELECT id FROM collections WHERE name=?", (clean,)).fetchone()
         if exists is not None:
             raise ValidationError(f"collection already exists: {clean}")
-        cursor = self._conn.execute(
-            "INSERT INTO collections(name) VALUES(?)", (clean,)
-        )
+        cursor = self._conn.execute("INSERT INTO collections(name) VALUES(?)", (clean,))
         self._conn.commit()
         return int(cursor.lastrowid)
 
     def delete_collection(self, name: str) -> None:
-        cursor = self._conn.execute(
-            "DELETE FROM collections WHERE name=?", (str(name).strip(),)
-        )
+        cursor = self._conn.execute("DELETE FROM collections WHERE name=?", (str(name).strip(),))
         self._conn.commit()
         if cursor.rowcount == 0:
             raise ValidationError(f"no collection named {name!r}")
@@ -395,8 +397,7 @@ class LibraryService:
         cid = self._collection_id(collection)
         self._require(item_id)
         self._conn.execute(
-            "INSERT OR IGNORE INTO collection_items(collection_id, item_id)"
-            " VALUES(?, ?)",
+            "INSERT OR IGNORE INTO collection_items(collection_id, item_id) VALUES(?, ?)",
             (cid, item_id),
         )
         self._conn.commit()
@@ -412,23 +413,17 @@ class LibraryService:
     # --------------------------------------------------------------- queries
 
     def get(self, item_id: int) -> Item:
-        row = self._conn.execute(
-            "SELECT * FROM items WHERE id=?", (item_id,)
-        ).fetchone()
+        row = self._conn.execute("SELECT * FROM items WHERE id=?", (item_id,)).fetchone()
         if row is None:
             raise ValidationError(f"no library item with id {item_id}")
         return self._row_to_item(row)
 
     def all_tags(self) -> tuple[str, ...]:
-        rows = self._conn.execute(
-            "SELECT DISTINCT tag FROM tags ORDER BY tag"
-        ).fetchall()
+        rows = self._conn.execute("SELECT DISTINCT tag FROM tags ORDER BY tag").fetchall()
         return tuple(r["tag"] for r in rows)
 
     def list_collections(self) -> tuple[str, ...]:
-        rows = self._conn.execute(
-            "SELECT name FROM collections ORDER BY name"
-        ).fetchall()
+        rows = self._conn.execute("SELECT name FROM collections ORDER BY name").fetchall()
         return tuple(r["name"] for r in rows)
 
     def collection_items(self, collection: str) -> tuple[Item, ...]:
@@ -490,9 +485,7 @@ class LibraryService:
     # ------------------------------------------------------------- internal
 
     def _require(self, item_id: int) -> None:
-        row = self._conn.execute(
-            "SELECT 1 FROM items WHERE id=?", (item_id,)
-        ).fetchone()
+        row = self._conn.execute("SELECT 1 FROM items WHERE id=?", (item_id,)).fetchone()
         if row is None:
             raise ValidationError(f"no library item with id {item_id}")
 

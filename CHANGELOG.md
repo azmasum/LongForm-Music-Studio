@@ -3,6 +3,27 @@
 All notable changes are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: semver.
 
+## [0.13.0] — 2026-08-23 (Phase 13)
+
+### Added
+- `tests/test_integration.py`: end-to-end MVP loop (compose → export →
+  master → QC → library → certificate → verify), director prompt →
+  delivered preset, batch uniqueness, edit-then-export, forgery drill,
+  project round-trip, offscreen GUI full session.
+- `tests/test_performance.py`: CI-friendly budgets for measure/MixBus/
+  auto_master/offline render speed and streamed-render memory ceiling.
+- `tests/test_recovery.py`: crash drills — corrupt audio, damaged project
+  JSON, backup rotation recovery, SQLite rollback on simulated crash,
+  corrupt params_json verification, queue resilience after mid-batch
+  failure + retry.
+
+### Hardened
+- `TimelineDocument.from_dict` raises `ProjectFileError` (with recovery
+  suggestion) on non-dict or malformed payloads instead of raw
+  AttributeError/silent leniency.
+- `LibraryService.import_audio_file` wraps libsndfile info/decode failures
+  into `ValidationError` with actionable messages.
+
 ## [0.12.0] — 2026-08-23 (Phase 12)
 
 ### Added

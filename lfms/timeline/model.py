@@ -3,11 +3,12 @@
 Pure data + validation — no Qt here, so the whole model is unit-testable
 and reusable by CLI/render paths. Serialization is plain JSON dicts.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 
-from lfms.core.errors import ValidationError
+from lfms.core.errors import ProjectFileError, ValidationError
 from lfms.core.ids import new_id
 
 TRACK_KINDS = ("MUSIC", "AMBIENCE", "VOICEOVER", "REFERENCE")
@@ -171,9 +172,7 @@ class TimelineDocument:
 
     def clips_in_range(self, start_sec: float, end_sec: float) -> list[Clip]:
         return [
-            clip
-            for clip in self.clips
-            if clip.start_sec < end_sec and clip.end_sec > start_sec
+            clip for clip in self.clips if clip.start_sec < end_sec and clip.end_sec > start_sec
         ]
 
     def clips_on_track(self, track_id: str) -> list[Clip]:
@@ -200,9 +199,7 @@ class TimelineDocument:
         if time_sec < 0.0:
             raise ValidationError("automation time must be >= 0")
         lane = self.lane(track_id, parameter)
-        lane.points = [
-            point for point in lane.points if abs(point.time_sec - time_sec) > 1e-9
-        ]
+        lane.points = [point for point in lane.points if abs(point.time_sec - time_sec) > 1e-9]
         point = AutomationPoint(time_sec=float(time_sec), value=float(value))
         lane.points.append(point)
         lane.sort()
@@ -241,10 +238,7 @@ class TimelineDocument:
                 {
                     "track_id": lane.track_id,
                     "parameter": lane.parameter,
-                    "points": [
-                        {"time_sec": p.time_sec, "value": p.value}
-                        for p in lane.points
-                    ],
+                    "points": [{"time_sec": p.time_sec, "value": p.value} for p in lane.points],
                 }
                 for lane in self.lanes
             ],
@@ -253,6 +247,19 @@ class TimelineDocument:
 
     @classmethod
     def from_dict(cls, data: dict) -> TimelineDocument:
+        if not isinstance(data, dict):
+            raise ProjectFileError(
+                "project data must be a JSON object",
+                technical=f"got {type(data).__name__}",
+                suggestion="restore from a backup (.bak) or start a new project",
+            )
+        if not isinstance(data.get("tracks", []), list) or not isinstance(
+            data.get("clips", []), list
+        ):
+            raise ProjectFileError(
+                "project file is damaged: 'tracks'/'clips' must be lists",
+                suggestion="restore from a backup or start a new project",
+            )
         document = cls(
             title=str(data.get("title", "Untitled timeline")),
             duration_sec=float(data.get("duration_sec", 600.0)),
@@ -262,9 +269,7 @@ class TimelineDocument:
         for raw in data.get("clips", []):
             document.add_clip(Clip(**raw))
         for raw in data.get("lanes", []):
-            lane = AutomationLane(
-                track_id=raw["track_id"], parameter=raw["parameter"]
-            )
+            lane = AutomationLane(track_id=raw["track_id"], parameter=raw["parameter"])
             lane.points = [
                 AutomationPoint(time_sec=p["time_sec"], value=p["value"])
                 for p in raw.get("points", [])
