@@ -3,6 +3,19 @@
 All notable changes are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: semver.
 
+## [1.0.0] — 2026-08-23 (Phase 14 — first stable release)
+
+### Added
+- Real GUI screenshots of all six pages, captured headlessly by the new
+  `scripts/make_screenshots.py` (Qt offscreen render → `docs/screenshots/`).
+- Download & run section in README (portable ZIP / Inno Setup / from source).
+
+### Changed
+- Version bumped to **1.0.0**: all 14 roadmap phases complete; MVP loop
+  verified end-to-end by 342 tests.
+- Portable ZIP rebuilt at 1.0.0 and re-verified via frozen entry checks
+  (`--version`, `LFMS_SELF_CHECK=1`).
+
 ## [0.13.0] — 2026-08-23 (Phase 13)
 
 ### Added

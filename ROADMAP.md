@@ -179,8 +179,23 @@ automated tests pass and the documented behavior actually works.
 - **Exit criteria met:** integration coverage per spec §71, performance
    budgets, crash-recovery drills — 342 tests passing.
 
-## Phase 14 — GitHub release v1.0.0
-- Docs finalized, screenshots, release artifacts, changelog.
+## Phase 14 — GitHub release v1.0.0 ✅
+- [x] Docs finalized: README status header → v1.0.0 (all 14 phases),
+      screenshots section, download & run section; docs index now lists
+      BATCH/PROVENANCE/RELEASE guides
+- [x] Real GUI screenshots of all six pages via new
+      `scripts/make_screenshots.py` (headless Qt offscreen + grab());
+      committed under `docs/screenshots/`
+- [x] Release artifacts rebuilt at 1.0.0:
+      `releases\LongFormMusicStudio-1.0.0-portable.zip` (~85 MB), built
+      through the full gate (tests → ruff → PyInstaller → frozen
+      self-check); frozen exe reports "LongForm Music Studio 1.0.0"
+- [x] Changelog complete 0.x → [1.0.0]; per-release checklist and manual
+      GitHub publish steps documented in docs/RELEASE.md
+- **Exit criteria met:** docs finalized, screenshots, release artifacts,
+   changelog. Note stated honestly: the actual GitHub publish (push, tag,
+   release upload) needs a remote/push access not present on this machine —
+   exact steps written in docs/RELEASE.md.
 
 ## Success criteria mapping (spec §99)
 The MVP loop (create project → choose genre/mood/duration → generate → preview

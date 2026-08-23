@@ -1,6 +1,8 @@
 # Release checklist
 
-Status: Phase 12 implemented and tested (315 tests passing overall).
+Status: v1.0.0 (all 14 phases complete, 342 tests passing). The portable
+ZIP at `releases\LongFormMusicStudio-1.0.0-portable.zip` was built and
+frozen-self-check verified on this machine.
 
 ## Build tooling (`installer/`)
 
@@ -64,3 +66,34 @@ installer was built without running ISCC. On a machine with Inno Setup:
    uninstall.
 7. Tag the commit (`v<version>`); artifacts stay in `releases/`
    (git-ignored).
+
+## Screenshots
+
+`python scripts/make_screenshots.py` regenerates all six README captures
+headlessly (`QT_QPA_PLATFORM=offscreen` + `QWidget.grab()`), writing
+`docs/screenshots/0N-<page>.png`. These are real renders of the running app,
+not mockups.
+
+## Publishing the GitHub release (manual — no remote configured here)
+
+This repository was developed locally; no git remote is configured on this
+machine, so the actual publish could not be performed here. On a machine with
+push access:
+
+```powershell
+git remote add origin https://github.com/<org>/LongForm-Music-Studio.git
+git push -u origin main
+git tag -a v1.0.0 -m "LFMS 1.0.0 — first stable release"
+git push origin v1.0.0
+```
+
+Then on GitHub → Releases → **Draft a new release**:
+
+1. Choose tag `v1.0.0`; title `LFMS 1.0.0`.
+2. Paste the `[1.0.0]` section of [CHANGELOG.md](../CHANGELOG.md) as notes.
+3. Attach `releases\LongFormMusicStudio-1.0.0-portable.zip`
+   (~85 MB; SHA256 it first: `Get-FileHash <zip> -Algorithm SHA256`).
+4. Optionally attach `LongFormMusicStudio-1.0.0-setup.exe` if compiled on a
+   machine with Inno Setup.
+5. Publish, then verify the download by unzipping on a clean machine and
+   running `LongFormMusicStudio.exe --version`.

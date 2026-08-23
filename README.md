@@ -4,10 +4,12 @@ Professional desktop application for creating **long-form background music**
 (10–120+ minutes) for YouTube, documentary, educational, meditation and podcast
 video creators. Offline-first, copyright-aware, built for Windows.
 
-> **Status: Phase 2 complete — audio engine core.**
-> The application is under active development following the phased roadmap in
-> [ROADMAP.md](ROADMAP.md). Features marked below reflect what exists today;
-> nothing is claimed as working unless it is implemented and tested.
+> **Status: v1.0.0 — all 14 roadmap phases complete.**
+> The full MVP loop works end-to-end and is covered by 342 automated tests
+> (unit, integration, performance budgets, crash-recovery drills, offscreen
+> GUI). See [ROADMAP.md](ROADMAP.md) for the phase-by-phase record; features
+> marked below reflect what exists today — nothing is claimed as working
+> unless it is implemented and tested.
 
 ## What it does (target product)
 
@@ -34,6 +36,34 @@ video creators. Offline-first, copyright-aware, built for Windows.
 | Batch render queue (unique seeds, pause/cancel/retry/reorder, off-thread worker, perf monitor) | ✅ Phase 11 done — 312 tests |
 | Installer & portable build (PyInstaller ZIP verified, Inno Setup script ready, release checklist) | ✅ Phase 12 done — 315 tests |
 | Testing hardening (integration E2E per spec §71, performance budgets, crash-recovery drills) | ✅ Phase 13 done — 342 tests |
+| v1.0.0 release (screenshots, portable ZIP rebuilt & self-verified, changelog, publish checklist) | ✅ Phase 14 done |
+
+## Screenshots
+
+Real captures of the running app (regenerate anytime with
+`python scripts/make_screenshots.py` — renders headlessly via Qt offscreen).
+
+| Library | Generate |
+| --- | --- |
+| ![Library](docs/screenshots/01-library.png) | ![Generate](docs/screenshots/02-generate.png) |
+
+| Batch queue | Timeline |
+| --- | --- |
+| ![Batch](docs/screenshots/03-batch.png) | ![Timeline](docs/screenshots/04-timeline.png) |
+
+| Mixer | Provenance |
+| --- | --- |
+| ![Mixer](docs/screenshots/05-mixer.png) | ![Provenance](docs/screenshots/06-provenance.png) |
+
+## Download & run
+
+- **Portable ZIP** (no install): grab
+  `LongFormMusicStudio-<version>-portable.zip` from GitHub Releases, unzip,
+  run `LongFormMusicStudio.exe`. Built and self-verified by
+  `installer/build_portable.ps1` (see [docs/RELEASE.md](docs/RELEASE.md)).
+- **Setup.exe**: `installer/setup.iss` builds an Inno Setup installer
+  (requires ISCC.exe; not bundled with the repo).
+- **From source**: see Development setup below, then `python -m lfms.app`.
 
 ## Copyright stance
 
@@ -68,10 +98,9 @@ python -m venv .venv
 - [ROADMAP.md](ROADMAP.md) — phased development plan
 - [docs/USER_GUIDE.md](docs/USER_GUIDE.md) · [docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md)
 - [docs/AUDIO_ENGINE.md](docs/AUDIO_ENGINE.md) · [docs/LICENSING.md](docs/LICENSING.md) · [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
+- [docs/BATCH.md](docs/BATCH.md) · [docs/PROVENANCE.md](docs/PROVENANCE.md) · [docs/RELEASE.md](docs/RELEASE.md)
 
 ## License
 
 MIT for LFMS code — see [LICENSE](LICENSE). Third-party dependencies keep their
 own licenses ([THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)).
-
-Screenshots: _placeholder — will be added when the GUI lands._
