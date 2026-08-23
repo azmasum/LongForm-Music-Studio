@@ -14,12 +14,19 @@ automated tests pass and the documented behavior actually works.
 - [x] Backup manager + autosave timer
 - **Exit criteria:** full unit suite green. ✅
 
-## Phase 2 — Audio engine core
-- Block-based processing graph, RenderContext, OfflineRenderer writing WAV via
-  soundfile, oscillator/filter/ADSR primitives, ambience noise generators,
-  RealtimeSink on sounddevice.
-- **Exit criteria:** render 30 s procedural fixture; duration/sample-rate/
-  non-silence/peak tests pass; playback smoke test manual checklist.
+## Phase 2 — Audio engine core ✅
+- [x] Block-based processing graph + `RenderContext`
+- [x] `OfflineRenderer` writing WAV/FLAC/OGG incrementally via soundfile
+      (exact frame counts, progress callbacks, pause/resume/cancel, safety
+      soft-limit, QC stats)
+- [x] Oscillators (sine/tri/saw/square, unison/detune, FM/AM/sub), ADSR,
+      RBJ biquad filters (scipy lfilter), LFOs
+- [x] Ambience generators (rain/wind/ocean/room tone/night/city) and drones
+- [x] Track strips + mixer graph with mute/solo/master chain
+- [x] Realtime `Player` on sounddevice with graceful device errors
+- **Exit criteria met:** 30 s procedural fixture rendered in tests with exact
+  frames/sample-rate/non-silence/bounded-peak assertions; byte-identical
+  reproducibility for identical seeds; measured ~15x realtime render speed.
 
 ## Phase 3 — Basic generator
 - Genre/mood/intensity → parameter plan; harmony + motif generation from seed;

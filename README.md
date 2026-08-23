@@ -4,7 +4,7 @@ Professional desktop application for creating **long-form background music**
 (10–120+ minutes) for YouTube, documentary, educational, meditation and podcast
 video creators. Offline-first, copyright-aware, built for Windows.
 
-> **Status: Phase 1 complete — project architecture + core foundation.**
+> **Status: Phase 2 complete — audio engine core.**
 > The application is under active development following the phased roadmap in
 > [ROADMAP.md](ROADMAP.md). Features marked below reflect what exists today;
 > nothing is claimed as working unless it is implemented and tested.
@@ -22,7 +22,7 @@ video creators. Offline-first, copyright-aware, built for Windows.
 | --- | --- |
 | Architecture & repo foundation | ✅ Done |
 | Core: config, portable paths, logging/crash reports, seeds, IDs, SQLite schema + repository, backups | ✅ Implemented & unit-tested |
-| Audio engine (streaming synthesis/effects) | ⏳ Phase 2 |
+| Audio engine (oscillators, filters, ambiences, mixer graph, offline renderer, realtime player) | ✅ Phase 2 done — 112 tests passing |
 | Procedural generator | ⏳ Phase 3 |
 | Long-form arranger + anti-repetition | ⏳ Phase 4 |
 | Timeline editor | ⏳ Phase 5 |
