@@ -1,0 +1,170 @@
+"""Shared enumerations used across LFMS modules."""
+from __future__ import annotations
+
+from enum import Enum
+
+
+class LicenseClass(str, Enum):
+    ORIGINAL = "ORIGINAL"
+    CC0 = "CC0"
+    PUBLIC_DOMAIN = "PUBLIC_DOMAIN"
+    USER_OWNED = "USER_OWNED"
+    COMMERCIAL_LICENSE = "COMMERCIAL_LICENSE"
+    UNKNOWN = "UNKNOWN"
+    RESTRICTED = "RESTRICTED"
+
+    @property
+    def needs_warning(self) -> bool:
+        return self in (LicenseClass.UNKNOWN, LicenseClass.RESTRICTED)
+
+
+class Genre(str, Enum):
+    AMBIENT = "AMBIENT"
+    CINEMATIC = "CINEMATIC"
+    DOCUMENTARY = "DOCUMENTARY"
+    EMOTIONAL = "EMOTIONAL"
+    INSPIRATIONAL = "INSPIRATIONAL"
+    CORPORATE = "CORPORATE"
+    TECHNOLOGY = "TECHNOLOGY"
+    FUTURISTIC = "FUTURISTIC"
+    DARK = "DARK"
+    SUSPENSE = "SUSPENSE"
+    MYSTERY = "MYSTERY"
+    PSYCHOLOGICAL = "PSYCHOLOGICAL"
+    HORROR = "HORROR"
+    CALM = "CALM"
+    MEDITATION = "MEDITATION"
+    RELAXATION = "RELAXATION"
+    PIANO = "PIANO"
+    ACOUSTIC = "ACOUSTIC"
+    LOFI = "LOFI"
+    CHILL = "CHILL"
+    MINIMAL = "MINIMAL"
+    ELECTRONIC = "ELECTRONIC"
+    CLASSICAL_INSPIRED = "CLASSICAL_INSPIRED"
+    NATURE = "NATURE"
+    NEWS = "NEWS"
+    PODCAST = "PODCAST"
+    STORYTELLING = "STORYTELLING"
+    EDUCATIONAL = "EDUCATIONAL"
+    MOTIVATIONAL = "MOTIVATIONAL"
+    DRAMATIC = "DRAMATIC"
+
+
+class Mood(str, Enum):
+    CALM = "CALM"
+    PEACEFUL = "PEACEFUL"
+    EMOTIONAL = "EMOTIONAL"
+    SAD = "SAD"
+    HOPEFUL = "HOPEFUL"
+    INSPIRATIONAL = "INSPIRATIONAL"
+    MYSTERIOUS = "MYSTERIOUS"
+    DARK = "DARK"
+    SUSPENSEFUL = "SUSPENSEFUL"
+    ENERGETIC = "ENERGETIC"
+    POWERFUL = "POWERFUL"
+    EPIC = "EPIC"
+    WARM = "WARM"
+    NOSTALGIC = "NOSTALGIC"
+    DREAMY = "DREAMY"
+    LONELY = "LONELY"
+    TENSE = "TENSE"
+    NEUTRAL = "NEUTRAL"
+    FUTURISTIC = "FUTURISTIC"
+    SCIENTIFIC = "SCIENTIFIC"
+
+
+class VideoTypePreset(str, Enum):
+    YOUTUBE_DOCUMENTARY = "YOUTUBE_DOCUMENTARY"
+    PSYCHOLOGY_EXPLAINER = "PSYCHOLOGY_EXPLAINER"
+    MOTIVATION = "MOTIVATION"
+    EDUCATIONAL = "EDUCATIONAL"
+    STORYTELLING = "STORYTELLING"
+    MEDITATION = "MEDITATION"
+    TECHNOLOGY = "TECHNOLOGY"
+    NEWS = "NEWS"
+    HORROR = "HORROR"
+    MYSTERY = "MYSTERY"
+    PODCAST = "PODCAST"
+
+
+class EnergyCurvePreset(str, Enum):
+    FLAT = "FLAT"
+    SLOW_BUILD = "SLOW_BUILD"
+    CINEMATIC_BUILD = "CINEMATIC_BUILD"
+    EMOTIONAL_WAVE = "EMOTIONAL_WAVE"
+    DOCUMENTARY = "DOCUMENTARY"
+    SUSPENSE = "SUSPENSE"
+    RELAXATION = "RELAXATION"
+    INTRO_PEAK_OUTRO = "INTRO_PEAK_OUTRO"
+    RANDOM_ORGANIC = "RANDOM_ORGANIC"
+
+
+class KeyRoot(str, Enum):
+    C = "C"
+    C_SHARP = "C#"
+    D = "D"
+    D_SHARP = "D#"
+    E = "E"
+    F = "F"
+    F_SHARP = "F#"
+    G = "G"
+    G_SHARP = "G#"
+    A = "A"
+    A_SHARP = "A#"
+    B = "B"
+
+
+class KeyMode(str, Enum):
+    MAJOR = "MAJOR"
+    MINOR = "MINOR"
+    DORIAN = "DORIAN"
+    MIXOLYDIAN = "MIXOLYDIAN"
+    PHRYGIAN = "PHRYGIAN"
+    LYDIAN = "LYDIAN"
+    CUSTOM = "CUSTOM"
+
+
+class ExportContainer(str, Enum):
+    WAV = "WAV"
+    MP3 = "MP3"
+    FLAC = "FLAC"
+    OGG = "OGG"
+
+
+class TrackKind(str, Enum):
+    GENERATED = "GENERATED"
+    VOICEOVER = "VOICEOVER"
+    REFERENCE = "REFERENCE"
+    IMPORT = "IMPORT"
+
+
+class RenderStatus(str, Enum):
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    PAUSED = "PAUSED"
+    DONE = "DONE"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+
+class SectionType(str, Enum):
+    INTRO = "INTRO"
+    THEME_A = "THEME_A"
+    VARIATION_A = "VARIATION_A"
+    TRANSITION = "TRANSITION"
+    THEME_B = "THEME_B"
+    VARIATION_B = "VARIATION_B"
+    BREAKDOWN = "BREAKDOWN"
+    DEVELOPMENT = "DEVELOPMENT"
+    RETURN = "RETURN"
+    OUTRO = "OUTRO"
+
+
+class PresetCategory(str, Enum):
+    GENERATOR = "GENERATOR"
+    INSTRUMENT = "INSTRUMENT"
+    EFFECT = "EFFECT"
+    MASTERING = "MASTERING"
+    VIDEO = "VIDEO"
+    PROJECT_TEMPLATE = "PROJECT_TEMPLATE"
