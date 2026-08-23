@@ -118,8 +118,18 @@ automated tests pass and the documented behavior actually works.
   generate → master → deliver loop works from the Export page.
 
 ## Phase 10 — AI Music Director (optional)
-- Prompt → structured parameters via provider adapters; disabled by default;
-  explicit consent warnings; app fully functional offline.
+- [x] `lfms.director` package: prompt → structured parameters through
+      provider adapters (deterministic offline interpreter + optional
+      local Ollama LLM adapter)
+- [x] Disabled by default; enabling requires an explicit consent
+      checkbox that states where the prompt goes per provider
+- [x] All provider output normalized/clamped (genre/mood whitelists,
+      duration/intensity/bpm clamps, stable seed derivation) — hostile
+      or malformed payloads can never produce invalid parameters
+- [x] App fully functional offline; Generate page gained the director
+      section (provider combo, prompt, "Suggest parameters")
+- **Exit criteria met:** 302 tests passing incl. offscreen GUI smoke;
+  the same prompt always yields the same suggestion (deterministic).
 
 ## Phase 11 — Batch generation & render queue
 - N-track batch with unique seeds, queue UI (reorder/pause/cancel/retry),

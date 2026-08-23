@@ -3,6 +3,28 @@
 All notable changes are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: semver.
 
+## [0.10.0] — 2026-08-23 (Phase 10)
+
+### Added
+- `lfms.director` package:
+  - Deterministic offline prompt interpreter (`offline` provider): genre,
+    moods, duration ("5 minutes"/"half an hour"), bpm, key, intensity
+    words, voiceover-safe and energy-curve keywords; stable seed derived
+    from the prompt so identical briefs give identical suggestions.
+  - Optional Ollama adapter (local server, JSON mode) with availability
+    probing and honest failure on unreachable hosts.
+  - `MusicDirector` service: **disabled by default**, explicit consent
+    gate (`enable(True)`), provider registry/switching.
+  - Shared coercion layer: whitelist genres/moods, clamp
+    duration/intensity/bpm, derive seeds — hostile or malformed model
+    output can never yield invalid parameters.
+- App: Generate page gained the AI Music Director section (consent
+  checkbox with plain-language privacy note, provider combo, prompt
+  field, "Suggest parameters" fills the form).
+
+### Verified
+- 302 tests passing incl. offscreen GUI smoke; ruff clean.
+
 ## [0.9.0] — 2026-08-23 (Phase 9)
 
 ### Added

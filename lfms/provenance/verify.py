@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from lfms.core.errors import ValidationError
 from lfms.generator.composer import Composer
 from lfms.generator.plan import GenerationParameters
+from lfms.generator.plan import params_from_payload as plan_params_from_payload
 
 
 @dataclass(frozen=True)
@@ -27,16 +28,8 @@ class VerifyResult:
 
 
 def params_from_payload(payload: dict) -> GenerationParameters:
-    """Build validated ``GenerationParameters`` from a stored JSON dict."""
-    allowed = set(GenerationParameters.__dataclass_fields__)
-    kwargs = {key: value for key, value in payload.items() if key in allowed}
-    if not {"seed", "duration_sec", "genre"} <= set(kwargs):
-        raise ValidationError(
-            "parameters payload lacks seed/duration_sec/genre"
-        )
-    params = GenerationParameters(**kwargs)
-    params.validate()
-    return params
+    """Deprecated alias; lives in :mod:`lfms.generator.plan` now."""
+    return plan_params_from_payload(payload)
 
 
 def verify_parameters(payload: dict, expected_fingerprint: str) -> VerifyResult:

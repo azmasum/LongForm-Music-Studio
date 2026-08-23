@@ -247,6 +247,40 @@ class GeneratePage(QWidget):
         form.addRow("Intensity", intensity_row)
         outer.addWidget(card)
 
+        # ------------------------------------------------ AI Music Director
+        director_box = QGroupBox("AI Music Director (optional — off by default)")
+        director_layout = QVBoxLayout(director_box)
+        self.director_enabled = QCheckBox(
+            "Enable AI director (I understand where my prompt is sent)"
+        )
+        director_layout.addWidget(self.director_enabled)
+        self.director_consent = QLabel(
+            "Offline interpreter: runs entirely on this machine.\n"
+            "Ollama provider: your prompt text is sent to your own "
+            "Ollama server (localhost by default). Nothing else leaves "
+            "the app."
+        )
+        self.director_consent.setWordWrap(True)
+        self.director_consent.setVisible(False)
+        director_layout.addWidget(self.director_consent)
+        self.director_provider = QComboBox()
+        from lfms.director import known_providers
+
+        for name in known_providers():
+            self.director_provider.addItem(name.capitalize(), name)
+        self.director_prompt = QLineEdit()
+        self.director_prompt.setPlaceholderText(
+            'Describe the music, e.g. "calm 5 minute documentary bed '
+            'under narration, slowly builds"'
+        )
+        self.suggest_button = QPushButton("Suggest parameters")
+        suggest_button_row = QHBoxLayout()
+        suggest_button_row.addWidget(self.director_provider)
+        suggest_button_row.addWidget(self.suggest_button)
+        director_layout.addWidget(self.director_prompt)
+        director_layout.addLayout(suggest_button_row)
+        outer.addWidget(director_box)
+
         self.generate_button = QPushButton("Generate into timeline")
         self.generate_button.setObjectName("primary")
         outer.addWidget(self.generate_button, alignment=Qt.AlignLeft)
@@ -257,6 +291,54 @@ class GeneratePage(QWidget):
         )
         self.intensity.valueChanged.connect(self.intensity_value.setNum)
         self.generate_button.clicked.connect(self._emit_request)
+
+        from lfms.director import MusicDirector
+
+        self.director = MusicDirector()
+        self.director_provider.setEnabled(False)
+        self.director_prompt.setEnabled(False)
+        self.suggest_button.setEnabled(False)
+        self.director_enabled.toggled.connect(self._on_director_toggled)
+        self.suggest_button.clicked.connect(self._on_suggest_clicked)
+
+    # ------------------------------------------------------- AI director
+
+    def _on_director_toggled(self, checked: bool) -> None:
+        if checked:
+            self.director.enable(True)
+        else:
+            self.director.disable()
+        self.director_consent.setVisible(checked)
+        for widget in (
+            self.director_provider,
+            self.director_prompt,
+            self.suggest_button,
+        ):
+            widget.setEnabled(checked)
+
+    def _on_suggest_clicked(self) -> None:
+        status = self.window().statusBar()
+        try:
+            self.director.use(self.director_provider.currentData())
+            suggestion = self.director.direct(self.director_prompt.text())
+        except ValidationError as exc:
+            status.showMessage(f"AI director: {exc}", 6000)
+            return
+        params = suggestion.params
+        self.seed.setValue(float(params.seed))
+        genre_index = self.genre.findData(params.genre)
+        if genre_index >= 0:
+            self.genre.setCurrentIndex(genre_index)
+        mood = params.moods[0] if params.moods else "NEUTRAL"
+        mood_index = self.mood.findData(mood)
+        if mood_index >= 0:
+            self.mood.setCurrentIndex(mood_index)
+        self.duration.setValue(float(params.duration_sec))
+        self.intensity.setValue(int(round(params.intensity)))
+        message = f"Applied ({suggestion.provider}): {suggestion.rationale}"
+        if suggestion.warnings:
+            message += " | " + "; ".join(suggestion.warnings)
+        status.showMessage(message[:180], 12000)
 
     def current_parameters(self) -> dict:
         return {

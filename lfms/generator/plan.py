@@ -263,3 +263,19 @@ def known_genres() -> tuple[str, ...]:
 
 def known_moods() -> tuple[str, ...]:
     return tuple(sorted(_MOOD_MODIFIERS))
+
+
+def params_from_payload(payload: dict) -> GenerationParameters:
+    """Build validated ``GenerationParameters`` from a plain JSON-style dict.
+
+    Unknown keys are ignored; seed/duration_sec/genre are required.
+    """
+    allowed = set(GenerationParameters.__dataclass_fields__)
+    kwargs = {key: value for key, value in payload.items() if key in allowed}
+    if not {"seed", "duration_sec", "genre"} <= set(kwargs):
+        raise ValidationError(
+            "parameters payload lacks seed/duration_sec/genre"
+        )
+    params = GenerationParameters(**kwargs)
+    params.validate()
+    return params

@@ -106,6 +106,44 @@ def test_mix_page_edits_are_undoable(qapp, tmp_path):
     window.library.close()
 
 
+def test_generate_page_ai_director_flow(qapp, tmp_path):
+    window = _make_window(tmp_path)
+    page = window.generate_page
+
+    assert page.director.enabled is False
+    assert not page.suggest_button.isEnabled()
+
+    page.director_enabled.setChecked(True)
+    assert page.director.enabled is True
+    assert page.suggest_button.isEnabled()
+
+    page.director_prompt.setText(
+        "calm documentary bed under narration, 5 minutes"
+    )
+    page.suggest_button.click()
+
+    params = page.current_parameters()
+    assert params["genre"] == "DOCUMENTARY"
+    assert params["duration_sec"] == 300.0
+    assert params["intensity"] <= 40.0
+    assert params["seed"] > 0
+
+    # deterministic: same prompt -> same suggestion
+    (tmp_path / "second").mkdir()
+    window2 = _make_window(tmp_path / "second")
+    page2 = window2.generate_page
+    page2.director_enabled.setChecked(True)
+    page2.director_prompt.setText(page.director_prompt.text())
+    page2.suggest_button.click()
+    assert page2.current_parameters()["seed"] == params["seed"]
+    window2.library.close()
+
+    # disabled again -> direct() refuses
+    page.director_enabled.setChecked(False)
+    assert page.director.enabled is False
+    window.library.close()
+
+
 def test_provenance_page_verifies_and_exports(qapp, tmp_path):
     window = _make_window(tmp_path)
     window.generate_from_payload(
