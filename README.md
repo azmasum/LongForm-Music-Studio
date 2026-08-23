@@ -17,7 +17,7 @@ video creators. Offline-first, copyright-aware, built for Windows.
 - Arranges 10–120+ minute tracks with anti-repetition variation (no obvious looping)
 - Energy curves, intro/outro, transitions, voiceover-safe mixing with ducking
 - Timeline editor, multi-track mixer, effects, mastering (LUFS-aware)
-- Exports WAV / MP3 / FLAC / OGG with license & provenance certificates
+- Exports WAV / FLAC with license & provenance certificates (mastered to LUFS presets)
 - Library with search, tags, favorites; SQLite-backed projects and render queue
 
 | Area | Status |
@@ -96,7 +96,7 @@ python -m venv .venv
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — full technical architecture
 - [ROADMAP.md](ROADMAP.md) — phased development plan
-- [docs/USER_GUIDE.md](docs/USER_GUIDE.md) · [docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md)
+- [docs/USER_GUIDE.md](docs/USER_GUIDE.md) · [বাংলা ইউজার ম্যানুয়াল (Bengali user manual)](docs/USER_MANUAL_BN.md) · [docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md)
 - [docs/AUDIO_ENGINE.md](docs/AUDIO_ENGINE.md) · [docs/LICENSING.md](docs/LICENSING.md) · [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
 - [docs/BATCH.md](docs/BATCH.md) · [docs/PROVENANCE.md](docs/PROVENANCE.md) · [docs/RELEASE.md](docs/RELEASE.md)
 
