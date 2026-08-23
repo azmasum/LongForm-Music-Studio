@@ -65,8 +65,17 @@ automated tests pass and the documented behavior actually works.
   work — the canvas currently draws clip/marker geometry.
 
 ## Phase 6 — Mixer & effects
-- Per-track volume/pan/mute/solo/fades, effect chain (EQ/compressor/reverb/
-  delay/etc.) with presets, voiceover ducking/sidechain.
+- [x] Channel strips: volume/pan/mute/solo, linear fades (`ChannelState`,
+      `fade_gain_curve`)
+- [x] Effect chain: EQ3 / compressor / delay / reverb with param validation,
+      reset + serialization; 6 curated presets
+      (`lfms.mixer.effects/chain/presets`)
+- [x] Voiceover ducking/sidechain: hop-based envelope ducker wired into the
+      offline `MixBus` (VO bus drives, music buses duck)
+- **Exit criteria met:** deterministic mixes (byte-identical re-renders),
+  solo/mute/fades/pan verified by tests; 60 s 3-channel mix with reverb +
+  ducking at ~45x realtime; 221 tests passing. Mixer UI stays a placeholder
+  until Phase 8 (documented in docs/MIXER.md).
 
 ## Phase 7 — Mastering & QC
 - LUFS/true-peak/RMS measurement, auto-master presets (YouTube etc.), QC

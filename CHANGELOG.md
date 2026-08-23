@@ -3,6 +3,29 @@
 All notable changes are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: semver.
 
+## [0.6.0] — 2026-08-23 (Phase 6)
+
+### Added
+- `lfms.mixer` package:
+  - Channel strips: `ChannelState` (volume/pan/mute/solo/kind/fades) with
+    validation; linear full-length fade curves.
+  - Parametric effects: EQ3 (shelf/peaking/shelf biquads), compressor
+    (linked envelope + smooth gain), stereo feedback delay, Schroeder
+    reverb (4 combs + 2 allpasses, vectorized fixed-lag windows). All
+    deterministic, validating, streamable (`params`/`set_param`/`reset`).
+  - Effect chains with 6 curated presets and JSON roundtrip.
+  - Voiceover sidechain ducking: 256-sample-hop envelope ducker; VO-kind
+    channels drive it in the offline `MixBus` while bypassing it.
+  - `MixBus`: streaming offline mixer — stems or live sources, solo/mute,
+    fades, equal-power pan, chains, master volume/effects.
+
+### Performance
+- Reverb/delay recursions vectorized via fixed-lag window processing;
+  60 s 3-channel mix with reverb + ducking renders at ~45x realtime.
+
+### Verified
+- 221 tests passing (24 new mixer tests); ruff clean.
+
 ## [0.5.0] — 2026-08-23 (Phase 5)
 
 ### Added

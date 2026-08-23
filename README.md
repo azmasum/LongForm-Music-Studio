@@ -25,8 +25,8 @@ video creators. Offline-first, copyright-aware, built for Windows.
 | Audio engine (oscillators, filters, ambiences, mixer graph, offline renderer, realtime player) | ✅ Phase 2 done |
 | Procedural generator (plan → harmony/melody → audio, seed-reproducible) | ✅ Phase 3 done |
 | Long-form arranger (sections, energy curves, repetition score) | ✅ Phase 4 done |
-| Timeline model + undo/redo + PySide6 app shell (`python -m lfms.app`) | ✅ Phase 5 done — 197 tests (GUI smoke offscreen-gated) |
-| Mixer & effects | ⏳ Phase 6 |
+| Timeline model + undo/redo + PySide6 app shell (`python -m lfms.app`) | ✅ Phase 5 done |
+| Mixer & effects (chains, presets, voiceover ducking, offline MixBus) | ✅ Phase 6 done — 221 tests, ~45x realtime mix |
 | Mastering | ⏳ Phase 7 |
 | Library UI/services | ⏳ Phase 8 |
 | Licensing/provenance certificates | ⏳ Phase 9 |
