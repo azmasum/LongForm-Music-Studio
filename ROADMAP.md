@@ -132,8 +132,16 @@ automated tests pass and the documented behavior actually works.
   the same prompt always yields the same suggestion (deterministic).
 
 ## Phase 11 — Batch generation & render queue
-- N-track batch with unique seeds, queue UI (reorder/pause/cancel/retry),
-  performance monitor.
+- [x] N-track batch with unique seeds (`make_batch`), full pipeline per
+      track (render → master → QC → archive → certificate)
+- [x] Queue UI: live table (status/progress/elapsed/realtime), reorder,
+      pause/resume, cancel pending + cooperative cancel mid-render,
+      retry failed, clear finished
+- [x] Performance monitor: rolling realtime-factor stats in the Batch
+      page; queue worker off the GUI thread; `LibraryService` made
+      thread-safe for shared use
+- **Exit criteria met:** 312 tests passing incl. offscreen GUI smoke;
+  end-to-end batch (2 tracks) verified with delivered files on disk.
 
 ## Phase 12 — Installer & portable build
 - PyInstaller portable ZIP + Inno Setup installer; release checklist.

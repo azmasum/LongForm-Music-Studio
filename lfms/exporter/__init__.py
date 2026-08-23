@@ -1,4 +1,4 @@
-"""Export pipeline (Phase 9 wiring): item -> render -> master -> QC -> archive."""
-from lfms.exporter.service import ExportOutcome, export_item
+"""Export pipeline: item/params -> render -> master -> QC -> archive."""
+from lfms.exporter.service import ExportOutcome, export_item, export_parameters
 
-__all__ = ["ExportOutcome", "export_item"]
+__all__ = ["ExportOutcome", "export_item", "export_parameters"]

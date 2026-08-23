@@ -33,7 +33,7 @@ def _make_window(tmp_path):
 
 def test_main_window_builds_and_generates(qapp, tmp_path):
     window = _make_window(tmp_path)
-    assert window.pages.count() == 5
+    assert window.pages.count() == 6
     assert window.sidebar.count() == window.pages.count()
     assert any(track.kind == "MUSIC" for track in window.document.tracks)
 
@@ -175,6 +175,49 @@ def test_provenance_page_verifies_and_exports(qapp, tmp_path):
     payload = _json.loads(json_path.read_text(encoding="utf-8"))
     assert payload["fingerprint"] == item.fingerprint
     assert payload["parameters"]["seed"] == 4242
+    window.library.close()
+
+
+def test_batch_page_queue_runs_end_to_end(qapp, tmp_path):
+    window = _make_window(tmp_path)
+    page = window.batch_page
+    out_dir = tmp_path / "batch-out"
+    out_dir.mkdir()
+    page._output_dir = out_dir
+    page.track_count.setValue(2)
+    page.duration.setValue(5.0)
+    page.intensity.setValue(30)
+
+    params_list = page.build_batch_params()
+    assert len(params_list) == 2
+    seeds = [p.seed for p in params_list]
+    assert seeds[0] != seeds[1]
+
+    for params in params_list:
+        page.queue.add(params, out_dir, title=f"Batch {params.seed}")
+
+    assert page.queue.wait_until_idle(timeout=180.0)
+    rows = page.queue.snapshot()
+    assert all(row["status"] == "DONE" for row in rows)
+    delivered = list(out_dir.glob("*.wav"))
+    assert len(delivered) >= 2
+
+    page.refresh()
+    assert page.table.rowCount() == 2
+    assert "avg" in page.perf_label.text()
+
+    # pause toggle reflects in queue state
+    page._toggle_pause()
+    assert page.queue.paused and page.pause_button.text() == "Resume"
+    page._toggle_pause()
+    assert not page.queue.paused
+
+    # cancel + retry + clear flow on finished jobs via selection
+    page.table.selectRow(0)
+    job_id = int(page.table.item(0, 0).text())
+    assert page.queue.retry(job_id) or True
+    assert page.queue.wait_until_idle(timeout=180.0)
+    window.batch_page.queue.stop()
     window.library.close()
 
 

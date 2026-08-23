@@ -5,9 +5,10 @@ from __future__ import annotations
 import random
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QColor, QPainter, QPen
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QApplication,
     QCheckBox,
     QComboBox,
@@ -25,7 +26,10 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QPushButton,
     QSlider,
+    QSpinBox,
     QStackedWidget,
+    QTableWidget,
+    QTableWidgetItem,
     QTextBrowser,
     QVBoxLayout,
     QWidget,
@@ -57,7 +61,7 @@ from lfms.timeline import (
     TrackState,
 )
 
-SIDEBAR_ITEMS = ("Library", "Generate", "Timeline", "Mix", "Export")
+SIDEBAR_ITEMS = ("Library", "Generate", "Batch", "Timeline", "Mix", "Export")
 
 DEFAULT_DB_PATH = Path.home() / ".lfms" / "library.db"
 
@@ -351,6 +355,217 @@ class GeneratePage(QWidget):
 
     def _emit_request(self) -> None:
         self.generate_requested.emit(self.current_parameters())
+
+
+class BatchPage(QWidget):
+    """Batch generation with a live render queue table and perf monitor."""
+
+    def __init__(self, library: LibraryService, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        from lfms.batch import RenderQueue, make_batch
+
+        self.library = library
+        self.queue = RenderQueue(library)
+        self._batch_factory = make_batch
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(28, 24, 28, 24)
+        heading = QLabel("Batch render queue")
+        heading.setObjectName("page-title")
+        outer.addWidget(heading)
+        outer.addSpacing(10)
+
+        card = QFrame()
+        card.setObjectName("card")
+        form = QFormLayout(card)
+        form.setContentsMargins(18, 16, 18, 16)
+        form.setSpacing(10)
+
+        self.track_count = QSpinBox()
+        self.track_count.setRange(1, 24)
+        self.track_count.setValue(4)
+
+        self.duration = QDoubleSpinBox()
+        self.duration.setRange(10.0, 7200.0)
+        self.duration.setDecimals(0)
+        self.duration.setSuffix(" s")
+        self.duration.setValue(120.0)
+
+        self.genre = QComboBox()
+        from lfms.core.enums import Genre as _Genre
+        from lfms.core.enums import Mood as _Mood
+
+        for genre in _Genre:
+            self.genre.addItem(humanize(genre.value), genre.value)
+        self.genre.setCurrentIndex(list(_Genre).index(_Genre.AMBIENT))
+
+        self.mood = QComboBox()
+        for mood in _Mood:
+            self.mood.addItem(humanize(mood.value), mood.value)
+
+        self.intensity = QSpinBox()
+        self.intensity.setRange(0, 100)
+        self.intensity.setValue(45)
+
+        self.preset = QComboBox()
+        for preset_name in known_target_presets():
+            self.preset.addItem(preset_name, preset_name)
+
+        form.addRow("Tracks", self.track_count)
+        form.addRow("Duration each", self.duration)
+        form.addRow("Genre", self.genre)
+        form.addRow("Mood", self.mood)
+        form.addRow("Intensity", self.intensity)
+        form.addRow("Mastering preset", self.preset)
+        outer.addWidget(card)
+
+        dir_row = QHBoxLayout()
+        self.output_dir_label = QLabel("No output folder chosen")
+        choose_button = QPushButton("Choose output folder…")
+        choose_button.clicked.connect(self._choose_dir)
+        dir_row.addWidget(self.output_dir_label, stretch=1)
+        dir_row.addWidget(choose_button)
+        outer.addLayout(dir_row)
+
+        enqueue_row = QHBoxLayout()
+        self.enqueue_button = QPushButton("Enqueue batch")
+        self.enqueue_button.setObjectName("primary")
+        enqueue_row.addWidget(self.enqueue_button)
+        enqueue_row.addStretch(1)
+        outer.addLayout(enqueue_row)
+
+        self.table = QTableWidget(0, 7)
+        self.table.setHorizontalHeaderLabels(
+            ["ID", "Title", "Status", "Progress %", "Elapsed s", "Realtime x", "Note"]
+        )
+        self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        outer.addWidget(self.table, stretch=1)
+
+        control_row = QHBoxLayout()
+        self.pause_button = QPushButton("Pause")
+        self.cancel_button = QPushButton("Cancel selected")
+        self.retry_button = QPushButton("Retry selected")
+        self.up_button = QPushButton("Move up")
+        self.down_button = QPushButton("Move down")
+        self.clear_button = QPushButton("Clear finished")
+        for btn in (
+            self.pause_button,
+            self.cancel_button,
+            self.retry_button,
+            self.up_button,
+            self.down_button,
+            self.clear_button,
+        ):
+            control_row.addWidget(btn)
+        control_row.addStretch(1)
+        outer.addLayout(control_row)
+
+        self.perf_label = QLabel("")
+        outer.addWidget(self.perf_label)
+
+        self.enqueue_button.clicked.connect(self._enqueue)
+        self.pause_button.clicked.connect(self._toggle_pause)
+        self.cancel_button.clicked.connect(lambda: self._act_on_selection(self.queue.cancel))
+        self.retry_button.clicked.connect(lambda: self._act_on_selection(self.queue.retry))
+        self.up_button.clicked.connect(lambda: self._act_on_selection(lambda jid: self.queue.reorder(jid, -1)))
+        self.down_button.clicked.connect(lambda: self._act_on_selection(lambda jid: self.queue.reorder(jid, +1)))
+        self.clear_button.clicked.connect(self.queue.clear_finished)
+
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self.refresh)
+        self._timer.start(400)
+        self._output_dir: Path | None = None
+
+    # ------------------------------------------------------------- helpers
+
+    def _choose_dir(self) -> None:
+        target_dir = QFileDialog.getExistingDirectory(
+            self, "Choose batch output folder"
+        )
+        if not target_dir:
+            return
+        self._output_dir = Path(target_dir)
+        self.output_dir_label.setText(str(self._output_dir))
+
+    def build_batch_params(self) -> list:
+        base = GenerationParameters(
+            seed=int(random.randrange(1, 2_147_483_000)),
+            duration_sec=float(self.duration.value()),
+            genre=self.genre.currentData(),
+            moods=(self.mood.currentData(),),
+            intensity=float(self.intensity.value()),
+        )
+        return self._batch_factory(base, int(self.track_count.value()))
+
+    def _enqueue(self) -> None:
+        status = self.window().statusBar()
+        if self._output_dir is None:
+            status.showMessage("Choose an output folder first.", 5000)
+            return
+        try:
+            params_list = self.build_batch_params()
+        except ValidationError as exc:
+            status.showMessage(f"Batch rejected: {exc}", 8000)
+            return
+        preset = self.preset.currentData()
+        for params in params_list:
+            self.queue.add(
+                params,
+                self._output_dir,
+                title=f"Batch {params.seed}",
+                preset=preset,
+            )
+        status.showMessage(
+            f"Queued {len(params_list)} tracks ({preset}, "
+            f"{self.duration.value():.0f}s each).", 8000
+        )
+
+    def _toggle_pause(self) -> None:
+        if self.queue.paused:
+            self.queue.resume()
+            self.pause_button.setText("Pause")
+        else:
+            self.queue.pause()
+            self.pause_button.setText("Resume")
+
+    def _selected_job_id(self) -> int | None:
+        row = self.table.currentRow()
+        if row < 0:
+            return None
+        item = self.table.item(row, 0)
+        return int(item.text()) if item is not None else None
+
+    def _act_on_selection(self, action) -> bool:
+        job_id = self._selected_job_id()
+        if job_id is None:
+            return False
+        return bool(action(job_id))
+
+    def refresh(self) -> None:
+        rows = self.queue.snapshot()
+        self.table.setRowCount(len(rows))
+        for r, row_data in enumerate(rows):
+            values = [
+                str(row_data["job_id"]),
+                row_data["title"],
+                row_data["status"],
+                f"{row_data['progress']}%",
+                f"{row_data['elapsed_sec']:.1f}",
+                (
+                    f"{row_data['realtime_factor']:.1f}"
+                    if row_data["realtime_factor"]
+                    else "-"
+                ),
+                row_data["error"] or row_data["final_path"],
+            ]
+            for c, value in enumerate(values):
+                self.table.setItem(r, c, QTableWidgetItem(value))
+        summary = self.queue.perf_summary()
+        if self.queue.paused:
+            summary = "[PAUSED] " + summary
+        self.perf_label.setText(summary)
 
 
 class LibraryPage(QWidget):
@@ -903,6 +1118,7 @@ class MainWindow(QMainWindow):
 
         self.library_page = LibraryPage(self.library)
         self.generate_page = GeneratePage()
+        self.batch_page = BatchPage(self.library)
         self.timeline_canvas = TimelineCanvas()
         timeline_page = QWidget()
         timeline_layout = QVBoxLayout(timeline_page)
@@ -917,6 +1133,7 @@ class MainWindow(QMainWindow):
         self.pages = QStackedWidget()
         self.pages.addWidget(self.library_page)
         self.pages.addWidget(self.generate_page)
+        self.pages.addWidget(self.batch_page)
         self.pages.addWidget(timeline_page)
         self.pages.addWidget(self.mix_page)
         self.pages.addWidget(self.provenance_page)
@@ -1042,6 +1259,10 @@ class MainWindow(QMainWindow):
             self.generate_from_payload(payload)
         except Exception as exc:  # pragma: no cover - defensive UI guard
             self.statusBar().showMessage(f"Generation failed: {exc}", 8000)
+
+    def closeEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        self.batch_page.queue.stop()
+        super().closeEvent(event)
 
 
 def run() -> int:

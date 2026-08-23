@@ -3,6 +3,27 @@
 All notable changes are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: semver.
 
+## [0.11.0] — 2026-08-23 (Phase 11)
+
+### Added
+- `lfms.batch` package: sequential render queue with one daemon worker,
+  unique-seed batch cloning (`make_batch`), pause/resume/cancel/retry/
+  reorder, cooperative cancellation inside the renderer, rolling
+  realtime-factor performance stats.
+- `lfms.exporter.export_parameters`: full pipeline from fresh
+  `GenerationParameters` (registers the source item itself).
+- App: new **Batch** page — track count/duration/genre/mood/intensity/
+  preset form, output folder picker, live queue table (400 ms polling),
+  perf monitor label; window close stops the worker cleanly.
+
+### Changed
+- `LibraryService` is thread-safe: SQLite connection opened with
+  `check_same_thread=False`, every public call serialized under one
+  reentrant lock (render-queue worker shares it with the GUI).
+
+### Verified
+- 312 tests passing incl. offscreen GUI smoke; ruff clean.
+
 ## [0.10.0] — 2026-08-23 (Phase 10)
 
 ### Added

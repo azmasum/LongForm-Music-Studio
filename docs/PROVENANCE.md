@@ -61,8 +61,8 @@ folder; progress reports through the status bar.
 
 ## Honest limitations
 
-- The export runs synchronously on the GUI thread; long renders block
-  the window until Phase 11's render queue moves it off-thread.
+- Single exports on the Export page run synchronously on the GUI
+  thread; the Batch page (Phase 11) runs the same pipeline off-thread.
 - PDF certificates optional → not implemented.
 - Licensing is provenance-only: LFMS asserts what it generated and how;
   it does not perform third-party content detection.

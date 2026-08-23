@@ -64,6 +64,10 @@ class RenderError(LFMSError):
     pass
 
 
+class RenderCancelled(RenderError):
+    """Raised when a cooperative cancel stopped a render in progress."""
+
+
 class ImportExportError(LFMSError):
     pass
 

@@ -31,6 +31,7 @@ video creators. Offline-first, copyright-aware, built for Windows.
 | Sound library (search/tags/favorites/collections, smart tagging, Library+Mix UI) | ✅ Phase 8 done |
 | Provenance center + full export pipeline (render → master → QC → deliver, certificates, verification) | ✅ Phase 9 done — 279 tests |
 | AI Music Director (optional, off by default: offline interpreter + local Ollama adapter, consent-gated) | ✅ Phase 10 done — 302 tests |
+| Batch render queue (unique seeds, pause/cancel/retry/reorder, off-thread worker, perf monitor) | ✅ Phase 11 done — 312 tests |
 | Mastering | ⏳ Phase 7 |
 | Library UI/services | ⏳ Phase 8 |
 | Licensing/provenance certificates | ⏳ Phase 9 |

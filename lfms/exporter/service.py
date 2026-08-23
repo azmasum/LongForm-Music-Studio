@@ -1,24 +1,31 @@
-"""Full export pipeline: library item -> rendered audio -> mastered -> QC.
+"""Full export pipeline: composition -> rendered audio -> mastered -> QC.
 
-One call turns a generated library item into a delivered audio file:
-recompose from stored parameters, render offline, auto-master to the chosen
-loudness preset, run QC gates, register the result in the library and write
-a provenance certificate next to it.
+Two entry points share one core:
+
+- :func:`export_item` re-renders a generated library item from its stored
+  parameters (provenance-safe).
+- :func:`export_parameters` renders fresh ``GenerationParameters`` and
+  registers the source item in the library first (used by the batch queue).
+
+One call turns music into a delivered audio file: recompose, render
+offline, auto-master to the chosen loudness preset, run QC gates, register
+the result in the library and write a provenance certificate next to it.
 """
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import numpy as np
 import soundfile as sf
 
 from lfms.audio_engine.formats import resolve_sf_params
-from lfms.core.errors import ValidationError
+from lfms.core.errors import RenderCancelled, ValidationError
 from lfms.generator.composer import Composer
+from lfms.generator.plan import GenerationParameters, params_from_payload
 from lfms.generator.render import CompositionRenderer
-from lfms.generator.scheduler import EventTrackSource  # noqa: F401 (graph source)
 from lfms.library import LibraryService
 from lfms.mastering.master import (
     MasterResult,
@@ -28,7 +35,6 @@ from lfms.mastering.master import (
 )
 from lfms.mastering.qc import QCReport, run_qc
 from lfms.provenance.certificate import build_record, write_certificate
-from lfms.provenance.verify import params_from_payload
 
 
 @dataclass(frozen=True)
@@ -50,39 +56,39 @@ def _safe_stem(title: str) -> str:
     return stem.strip().replace(" ", "-")[:48] or "lfms-export"
 
 
-def export_item(
+class _CancelJobControl:
+    """Adapts a cancel predicate to the RenderJobControl protocol."""
+
+    def __init__(self, should_cancel: Callable[[], bool]) -> None:
+        self._should_cancel = should_cancel
+
+    def checkpoint(self) -> bool:
+        return not self._should_cancel()
+
+
+def _check_cancel(should_cancel: Callable[[], bool] | None) -> None:
+    if should_cancel is not None and should_cancel():
+        raise RenderCancelled("export cancelled by user")
+
+
+def _export_core(
     service: LibraryService,
-    item_id: int,
-    output_dir: str | Path,
-    *,
-    preset: str | TargetPreset = "YOUTUBE",
-    container: str = "WAV",
-    bit_depth: int = 24,
-    on_progress=None,
+    item,
+    payload: dict,
+    composition,
+    out_dir: Path,
+    target: TargetPreset,
+    container: str,
+    bit_depth: int,
+    on_progress: Callable[[float], None] | None,
+    should_cancel: Callable[[], bool] | None,
 ) -> ExportOutcome:
-    """Render, master, QC and archive one generated library item."""
-    item = service.get(item_id)
-    if not item.params_json:
-        raise ValidationError(
-            f"library item #{item_id} has no generation parameters to render"
-        )
-    try:
-        payload = json.loads(item.params_json)
-        params = params_from_payload(payload)
-    except json.JSONDecodeError as exc:
-        raise ValidationError("stored parameters are not valid JSON") from exc
-
-    target = resolve_target_preset(preset)
-    out_dir = Path(output_dir)
-    if not out_dir.exists():
-        raise ValidationError(f"output directory does not exist: {out_dir}")
-
     def report(fraction: float) -> None:
         if on_progress is not None:
             on_progress(max(0.0, min(1.0, float(fraction))))
 
     report(0.0)
-    composition = Composer(params).compose()
+    _check_cancel(should_cancel)
 
     # 1) offline render of the raw mix (0 .. 60% of total progress)
     raw_path = out_dir / f"{_safe_stem(item.title)}-raw.wav"
@@ -91,28 +97,41 @@ def export_item(
     def render_progress(inner: float) -> None:
         report(0.6 * inner)
 
-    renderer.render(raw_path, container="WAV", bit_depth=24, on_progress=render_progress)
-    if not raw_path.is_file():
-        raise ValidationError("render did not produce a file")
-
-    # 2) load, master, write final delivery file (60 .. 85%)
-    data, sr = sf.read(str(raw_path), always_2d=True, dtype="float32")
-    audio = np.ascontiguousarray(data.T.astype(np.float32))
-    report(0.65)
-    master = auto_master(audio, sr, target)
-    report(0.8)
-
-    fmt, subtype = resolve_sf_params(container, bit_depth)
-    extension = {"WAV": ".wav", "FLAC": ".flac"}.get(fmt.upper(), ".wav")
-    final_path = out_dir / f"{_safe_stem(item.title)} [{target.name}]{extension}"
-    sf.write(
-        str(final_path),
-        master.output.T,
-        sr,
-        format=fmt,
-        subtype=subtype,
+    job_control = (
+        _CancelJobControl(should_cancel) if should_cancel is not None else None
     )
-    raw_path.unlink(missing_ok=True)
+    try:
+        renderer.render(
+            raw_path,
+            container="WAV",
+            bit_depth=24,
+            on_progress=render_progress,
+            job_control=job_control,
+        )
+        _check_cancel(should_cancel)
+        if not raw_path.is_file():
+            raise ValidationError("render did not produce a file")
+
+        # 2) load, master, write final delivery file (60 .. 85%)
+        data, sr = sf.read(str(raw_path), always_2d=True, dtype="float32")
+        audio = np.ascontiguousarray(data.T.astype(np.float32))
+        report(0.65)
+        master = auto_master(audio, sr, target)
+        _check_cancel(should_cancel)
+        report(0.8)
+
+        fmt, subtype = resolve_sf_params(container, bit_depth)
+        extension = {"WAV": ".wav", "FLAC": ".flac"}.get(fmt.upper(), ".wav")
+        final_path = out_dir / f"{_safe_stem(item.title)} [{target.name}]{extension}"
+        sf.write(
+            str(final_path),
+            master.output.T,
+            sr,
+            format=fmt,
+            subtype=subtype,
+        )
+    finally:
+        raw_path.unlink(missing_ok=True)
     report(0.9)
 
     # 3) QC gates on the delivered file's numbers
@@ -139,7 +158,7 @@ def export_item(
         title=item.title,
         item_id=item.id,
         fingerprint=item.fingerprint,
-        duration_sec=float(params.duration_sec),
+        duration_sec=float(payload.get("duration_sec", 0.0)),
         parameters=payload,
         composition=composition,
         measurement=master.after,
@@ -161,4 +180,88 @@ def export_item(
         master=master,
         qc=qc,
         target_name=target.name,
+    )
+
+
+def export_item(
+    service: LibraryService,
+    item_id: int,
+    output_dir: str | Path,
+    *,
+    preset: str | TargetPreset = "YOUTUBE",
+    container: str = "WAV",
+    bit_depth: int = 24,
+    on_progress=None,
+    should_cancel=None,
+) -> ExportOutcome:
+    """Render, master, QC and archive one generated library item."""
+    item = service.get(item_id)
+    if not item.params_json:
+        raise ValidationError(
+            f"library item #{item_id} has no generation parameters to render"
+        )
+    try:
+        payload = json.loads(item.params_json)
+        params = params_from_payload(payload)
+    except json.JSONDecodeError as exc:
+        raise ValidationError("stored parameters are not valid JSON") from exc
+
+    target = resolve_target_preset(preset)
+    out_dir = Path(output_dir)
+    if not out_dir.exists():
+        raise ValidationError(f"output directory does not exist: {out_dir}")
+
+    composition = Composer(params).compose()
+    return _export_core(
+        service,
+        item,
+        payload,
+        composition,
+        out_dir,
+        target,
+        container,
+        bit_depth,
+        on_progress,
+        should_cancel,
+    )
+
+
+def export_parameters(
+    service: LibraryService,
+    params: GenerationParameters,
+    output_dir: str | Path,
+    *,
+    title: str | None = None,
+    preset: str | TargetPreset = "YOUTUBE",
+    container: str = "WAV",
+    bit_depth: int = 24,
+    on_progress=None,
+    should_cancel=None,
+) -> ExportOutcome:
+    """Compose fresh parameters, archive them and run the full pipeline."""
+    params.validate()
+    out_dir = Path(output_dir)
+    if not out_dir.exists():
+        raise ValidationError(f"output directory does not exist: {out_dir}")
+
+    payload = asdict(params)
+    payload["moods"] = tuple(params.moods)
+    composition = Composer(params).compose()
+    display_title = title or f"Track {params.seed}"
+    item = service.register_composition(
+        composition,
+        params,
+        title=display_title,
+    )
+    return _export_core(
+        service,
+        item,
+        payload,
+        composition,
+        out_dir,
+        resolve_target_preset(preset),
+        container,
+        bit_depth,
+        on_progress,
+        should_cancel,
     )

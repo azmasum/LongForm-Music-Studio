@@ -6,8 +6,10 @@ forgiving. The database is created on first open (parents auto-created).
 """
 from __future__ import annotations
 
+import functools
 import json
 import sqlite3
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -126,18 +128,47 @@ def smart_tags_for_measurement(
 
 
 class LibraryService:
-    """Persistent library backed by SQLite."""
+    """Persistent library backed by SQLite.
+
+    Thread-safe: the render queue's worker thread shares this service
+    with the GUI, so every public call runs under one reentrant lock.
+    """
 
     def __init__(self, db_path: str | Path = ":memory:") -> None:
         self.db_path = Path(db_path) if db_path != ":memory:" else None
         if self.db_path is not None:
             self.db_path.parent.mkdir(parents=True, exist_ok=True)
         target = str(self.db_path) if self.db_path is not None else ":memory:"
-        self._conn = sqlite3.connect(target)
+        self._lock = threading.RLock()
+        self._conn = sqlite3.connect(target, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA foreign_keys=ON")
         self._conn.executescript(_SCHEMA)
         self._conn.commit()
+        self._wrap_public_methods()
+
+    def _wrap_public_methods(self) -> None:
+        """Serialize every public call through ``self._lock`` so the
+        render-queue worker thread can share this service safely."""
+        lock = self._lock
+
+        def guarded(bound):
+            @functools.wraps(bound)
+            def call(*args, **kwargs):
+                with lock:
+                    return bound(*args, **kwargs)
+
+            return call
+
+        for name in dir(type(self)):
+            if name.startswith("_"):
+                continue
+            attr = getattr(self, name)
+            if callable(attr):
+                try:
+                    object.__setattr__(self, name, guarded(attr))
+                except (AttributeError, TypeError):  # pragma: no cover
+                    pass
 
     def close(self) -> None:
         self._conn.close()
