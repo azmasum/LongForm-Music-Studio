@@ -3,6 +3,24 @@
 All notable changes are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: semver.
 
+## [Unreleased]
+
+### Added
+- **MP3 and OGG export** on the Export & Provenance page (libsndfile 1.2+
+  encodes both natively; no external tool needed).
+- Generated music is now written to a real WAV file in a folder you choose
+  (defaults to your Downloads folder) and registered in the library with its
+  file path, so nothing gets lost.
+- The generated audio loads straight into the transport player, so
+  **Play / Pause / Stop work immediately** after generation.
+- Timeline clips are interactive: click to select, drag horizontally to move,
+  press Delete to remove — every action undoable with Ctrl+Z.
+- Usage hints on the Timeline and Mix pages explaining what each control does.
+
+### Fixed
+- Deadlock in the audio engine player when stopping during active playback
+  (`threading.Lock` → `RLock` for nested stop-inside-play/load calls).
+
 ## [1.0.0] — 2026-08-23 (Phase 14 — first stable release)
 
 ### Added

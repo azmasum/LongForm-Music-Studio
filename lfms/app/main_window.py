@@ -36,12 +36,14 @@ from PySide6.QtWidgets import (
 )
 
 from lfms.app.theme import ACCENT, BORDER, POSITIVE, TEXT_DIM
+from lfms.audio_engine.playback import BufferPlayer
 from lfms.core.enums import Genre, Mood
-from lfms.core.errors import ValidationError
+from lfms.core.errors import AudioDeviceError, ValidationError
 from lfms.core.version import APP_NAME, VERSION
 from lfms.exporter import export_item
 from lfms.generator.composer import Composer
 from lfms.generator.plan import GenerationParameters
+from lfms.generator.render import CompositionRenderer
 from lfms.library import Item, LibraryService
 from lfms.mastering import known_target_presets
 from lfms.provenance import (
@@ -56,6 +58,8 @@ from lfms.timeline import (
     AddTrackCommand,
     Clip,
     CommandStack,
+    MoveClipCommand,
+    RemoveClipCommand,
     SetTrackPropertyCommand,
     TimelineDocument,
     TrackState,
@@ -123,25 +127,145 @@ class TimelineCanvas(QWidget):
     LANE_HEIGHT = 38
     LANE_GAP = 6
 
+    clip_moved = Signal(str, float)      # clip_id, new_start_sec
+    clip_delete_requested = Signal(str)  # clip_id
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.document: TimelineDocument | None = None
+        self.selected_clip_id: str | None = None
+        self._clip_rects: dict[str, tuple[float, float, int, int]] = {}
+        self._drag_clip_id: str | None = None
+        self._drag_offset_sec = 0.0
+        self._drag_preview_start: float | None = None
         self.setMinimumHeight(240)
+        self.setFocusPolicy(Qt.StrongFocus)
+        self.setMouseTracking(False)
 
     def set_document(self, document: TimelineDocument) -> None:
         self.document = document
+        if document is not None and self.selected_clip_id is not None:
+            try:
+                document.clip(self.selected_clip_id)
+            except Exception:
+                self.selected_clip_id = None
         rows = len(document.tracks)
         self.setMinimumHeight(
             self.RULER_HEIGHT + rows * (self.LANE_HEIGHT + self.LANE_GAP) + 40
         )
+        self._recompute_rects()
         self.update()
+
+    # ------------------------------------------------------- hit testing
+
+    def _geometry(self):
+        document = self.document
+        width = max(1.0, float(self.width()) - 24.0)
+        scale = width / max(1.0, document.duration_sec)
+        return scale, 12.0, float(self.RULER_HEIGHT)
+
+    def clip_at(self, x: float, y: float) -> str | None:
+        """Return the clip_id whose rect contains (x, y), if any."""
+        for clip_id, (rx, ry, rw, rh) in self._clip_rects.items():
+            if rx <= x <= rx + rw and ry <= y <= ry + rh:
+                return clip_id
+        return None
+
+    def selected_clip(self) -> Clip | None:
+        if self.document is None or self.selected_clip_id is None:
+            return None
+        try:
+            return self.document.clip(self.selected_clip_id)
+        except Exception:
+            return None
+
+    def _recompute_rects(self) -> None:
+        """Rebuild the clip_id -> widget-rect map (also usable off-paint)."""
+        self._clip_rects.clear()
+        if self.document is None or not self.document.tracks:
+            return
+        scale, origin_x, ruler_bottom = self._geometry()
+        for index, track in enumerate(self.document.tracks):
+            lane_y = ruler_bottom + index * (self.LANE_HEIGHT + self.LANE_GAP)
+            for clip in self.document.clips_on_track(track.track_id):
+                x0 = origin_x + clip.start_sec * scale
+                if (
+                    clip.clip_id == self._drag_clip_id
+                    and self._drag_preview_start is not None
+                ):
+                    x0 = origin_x + self._drag_preview_start * scale
+                rect_w = max(3, int(max(3.0, clip.duration_sec * scale)) - 2)
+                rect_y = int(lane_y) + 16
+                self._clip_rects[clip.clip_id] = (
+                    x0 + 1, rect_y, rect_w, self.LANE_HEIGHT - 20,
+                )
+
+    # --------------------------------------------------------- interaction
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802 (Qt naming)
+        if event.button() != Qt.LeftButton or self.document is None:
+            return
+        clip_id = self.clip_at(event.position().x(), event.position().y())
+        self.selected_clip_id = clip_id
+        if clip_id is not None:
+            start_x = self._clip_rects[clip_id][0]
+            scale, _, _ = self._geometry()
+            self._drag_clip_id = clip_id
+            self._drag_offset_sec = (event.position().x() - start_x) / scale
+            self._drag_preview_start = None
+        self.update()
+
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802 (Qt naming)
+        if self._drag_clip_id is None or self.document is None:
+            return
+        scale, _, _ = self._geometry()
+        new_start = max(
+            0.0,
+            (event.position().x() / scale) - self._drag_offset_sec,
+        )
+        limit = max(0.0, self.document.duration_sec)
+        self._drag_preview_start = min(new_start, limit)
+        self.update()
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802 (Qt naming)
+        if self._drag_clip_id is None:
+            return
+        preview = self._drag_preview_start
+        clip_id = self._drag_clip_id
+        self._drag_clip_id = None
+        self._drag_preview_start = None
+        if preview is None:
+            return
+        try:
+            clip = self.document.clip(clip_id)
+        except Exception:
+            return
+        if abs(preview - clip.start_sec) >= 1.0:  # ignore accidental clicks
+            self.clip_moved.emit(clip_id, round(float(preview), 3))
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802 (Qt naming)
+        if (
+            self.selected_clip_id is not None
+            and event.key() in (Qt.Key_Delete, Qt.Key_Backspace)
+        ):
+            self.clip_delete_requested.emit(self.selected_clip_id)
+            self.selected_clip_id = None
+            self.update()
+            return
+        super().keyPressEvent(event)
+
+    # ------------------------------------------------------------ drawing
 
     def paintEvent(self, event) -> None:  # noqa: N802 (Qt naming)
         painter = QPainter(self)
         painter.fillRect(self.rect(), QColor("#14141c"))
+        self._recompute_rects()
         if self.document is None or not self.document.tracks:
             painter.setPen(QPen(QColor(TEXT_DIM)))
-            painter.drawText(self.rect(), Qt.AlignCenter, "No timeline loaded")
+            painter.drawText(
+                self.rect(), Qt.AlignCenter,
+                "No timeline loaded — generate music first (Generate page)",
+            )
             return
 
         document = self.document
@@ -177,11 +301,17 @@ class TimelineCanvas(QWidget):
             )
             for clip in document.clips_on_track(track.track_id):
                 x0 = origin_x + clip.start_sec * scale
+                if clip.clip_id == self._drag_clip_id and self._drag_preview_start is not None:
+                    x0 = origin_x + self._drag_preview_start * scale
                 rect_w = max(3, int(max(3.0, clip.duration_sec * scale)) - 2)
                 rect_y = int(lane_y) + 16
                 fill = QColor(ACCENT if clip.source_kind == "GENERATED" else POSITIVE)
                 fill.setAlpha(150)
                 painter.setBrush(fill)
+                if clip.clip_id == self.selected_clip_id:
+                    painter.setPen(QPen(QColor("#ffffff"), 2))
+                else:
+                    painter.setPen(QPen(QColor(BORDER)))
                 painter.drawRoundedRect(int(x0) + 1, rect_y, rect_w, self.LANE_HEIGHT - 20, 5, 5)
                 if rect_w > 40:
                     painter.drawText(
@@ -251,6 +381,22 @@ class GeneratePage(QWidget):
         form.addRow("Intensity", intensity_row)
         outer.addWidget(card)
 
+        # --------------------------------------------- output folder (WAV)
+        out_box = QGroupBox("Where to save the audio file")
+        out_layout = QHBoxLayout(out_box)
+        default_out = str(Path.home() / "Downloads")
+        self.output_dir_edit = QLineEdit(default_out)
+        self.output_dir_edit.setToolTip(
+            "Each generation also writes a WAV file here so you can find "
+            "and upload it easily."
+        )
+        self.choose_output_dir = QPushButton("Choose…")
+        self.open_output_dir = QPushButton("Open folder")
+        out_layout.addWidget(self.output_dir_edit, stretch=1)
+        out_layout.addWidget(self.choose_output_dir)
+        out_layout.addWidget(self.open_output_dir)
+        outer.addWidget(out_box)
+
         # ------------------------------------------------ AI Music Director
         director_box = QGroupBox("AI Music Director (optional — off by default)")
         director_layout = QVBoxLayout(director_box)
@@ -295,6 +441,8 @@ class GeneratePage(QWidget):
         )
         self.intensity.valueChanged.connect(self.intensity_value.setNum)
         self.generate_button.clicked.connect(self._emit_request)
+        self.choose_output_dir.clicked.connect(self._choose_output_dir)
+        self.open_output_dir.clicked.connect(self._open_output_dir)
 
         from lfms.director import MusicDirector
 
@@ -355,6 +503,30 @@ class GeneratePage(QWidget):
 
     def _emit_request(self) -> None:
         self.generate_requested.emit(self.current_parameters())
+
+    def output_dir(self) -> Path:
+        text = self.output_dir_edit.text().strip()
+        return Path(text) if text else Path.home() / "Downloads"
+
+    def set_output_dir(self, path: Path | str) -> None:
+        self.output_dir_edit.setText(str(path))
+
+    def _choose_output_dir(self) -> None:
+        from PySide6.QtWidgets import QFileDialog
+
+        chosen = QFileDialog.getExistingDirectory(
+            self, "Choose output folder", self.output_dir_edit.text()
+        )
+        if chosen:
+            self.output_dir_edit.setText(chosen)
+
+    def _open_output_dir(self) -> None:
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+
+        folder = self.output_dir()
+        folder.mkdir(parents=True, exist_ok=True)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
 
 
 class BatchPage(QWidget):
@@ -787,6 +959,14 @@ class MixPage(QWidget):
         heading = QLabel("Mix")
         heading.setObjectName("page-title")
         outer.addWidget(heading)
+        hint = QLabel(
+            "One strip per timeline track. Volume (dB) and Pan are sliders; "
+            "M = mute the track, S = solo (hear only this track). "
+            "Every change is undoable with Ctrl+Z."
+        )
+        hint.setObjectName("muted")
+        hint.setWordWrap(True)
+        outer.addWidget(hint)
         outer.addSpacing(10)
         self.strips_area = QWidget()
         self.strips_layout = QHBoxLayout(self.strips_area)
@@ -910,6 +1090,11 @@ class ProvenancePage(QWidget):
         for preset_name in known_target_presets():
             self.preset_combo.addItem(preset_name, preset_name)
         export_row.addWidget(self.preset_combo)
+        export_row.addWidget(QLabel("Format:"))
+        self.container_combo = QComboBox()
+        for container_name in ("WAV", "FLAC", "OGG", "MP3"):
+            self.container_combo.addItem(container_name, container_name)
+        export_row.addWidget(self.container_combo)
         self.export_dir_label = QLabel("No output folder chosen")
         export_row.addWidget(self.export_dir_label, stretch=1)
         self.choose_export_dir_button = QPushButton("Choose folder…")
@@ -1058,7 +1243,10 @@ class ProvenancePage(QWidget):
                 f"[{outcome.target_name}, QC: {outcome.qc.status}]", 12000
             )
 
-    def run_export(self, output_dir: Path, *, preset_name: str | None = None):
+    def run_export(
+        self, output_dir: Path, *, preset_name: str | None = None,
+        container: str | None = None,
+    ):
         """Render + master + archive the selected item into ``output_dir``.
 
         Synchronous; used directly by tests and by the click handler.
@@ -1068,6 +1256,11 @@ class ProvenancePage(QWidget):
         if item is None:
             return None
         preset = preset_name or self.preset_combo.currentData() or "YOUTUBE"
+        container = (
+            container
+            or (self.container_combo.currentData() if hasattr(self, "container_combo") else None)
+            or "WAV"
+        )
         status = self.window().statusBar()
 
         def progress(fraction: float) -> None:
@@ -1084,6 +1277,7 @@ class ProvenancePage(QWidget):
         try:
             outcome = export_item(
                 self.library, item.id, output_dir, preset=preset,
+                container=container,
                 on_progress=progress,
             )
         finally:
@@ -1126,6 +1320,12 @@ class MainWindow(QMainWindow):
         timeline_heading = QLabel("Timeline")
         timeline_heading.setObjectName("page-title")
         timeline_layout.addWidget(timeline_heading)
+        timeline_hint = QLabel(
+            "Click a clip to select it · drag left/right to move · "
+            "press Delete to remove (Ctrl+Z undoes)"
+        )
+        timeline_hint.setObjectName("muted")
+        timeline_layout.addWidget(timeline_hint)
         timeline_layout.addWidget(self.timeline_canvas, stretch=1)
         self.mix_page = MixPage()
         self.provenance_page = ProvenancePage(self.library)
@@ -1146,6 +1346,12 @@ class MainWindow(QMainWindow):
         body_layout.addWidget(self.pages, stretch=1)
 
         self.transport = TransportBar()
+        self._player = BufferPlayer()
+        self._play_timer = QTimer(self)
+        self._play_timer.setInterval(100)
+        self._play_timer.timeout.connect(self._poll_playback)
+        self.transport.play_toggled.connect(self._on_play_toggled)
+        self.transport.stopped.connect(self._on_transport_stop)
 
         container = QWidget()
         window_layout = QVBoxLayout(container)
@@ -1161,6 +1367,8 @@ class MainWindow(QMainWindow):
 
         self.generate_page.generate_requested.connect(self._on_generate)
         self.mix_page.property_changed.connect(self._on_mix_property)
+        self.timeline_canvas.clip_moved.connect(self._on_clip_moved)
+        self.timeline_canvas.clip_delete_requested.connect(self._on_clip_delete)
         self._build_actions()
         self.refresh_timeline_view()
 
@@ -1193,9 +1401,50 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(str(exc), 6000)
             return
         self.commands.execute(command, self.document)
-        self.statusBar().showMessage(
-            f"{command.name} — Ctrl+Z to undo", 4000
-        )
+        self.refresh_timeline_view()
+        self.statusBar().showMessage(f"{command.name} — Ctrl+Z to undo", 4000)
+
+    # ------------------------------------------------- playback plumbing
+
+    def _on_play_toggled(self, playing: bool) -> None:
+        status = self.statusBar()
+        if not playing:
+            self._player.pause()
+            return
+        if not self._player.loaded:
+            status.showMessage(
+                "Nothing to play yet — generate music first "
+                "(Generate page), then press Play again.", 8000,
+            )
+            self.transport.play_button.setChecked(False)
+            return
+        try:
+            self._player.play()
+        except AudioDeviceError as exc:
+            status.showMessage(f"Playback: {exc}", 8000)
+            self.transport.play_button.setChecked(False)
+            return
+        self.transport.set_range(max(1.0, self._player.duration_sec))
+        self._play_timer.start()
+
+    def _on_transport_stop(self) -> None:
+        self._play_timer.stop()
+        self._player.stop()
+        self.transport.set_position(0.0)
+
+    def _poll_playback(self) -> None:
+        self.transport.set_position(self._player.position_sec)
+        if not self._player.playing and not getattr(
+            self._player, "playback_finished", False
+        ):
+            return  # paused by user; keep play button state as-is
+        if getattr(self._player, "playback_finished", False) and not (
+            self._player.playing
+        ):
+            self._play_timer.stop()
+            self.transport.play_button.setChecked(False)
+            self.transport.set_position(0.0)
+            self._player.stop()
 
     def _undo(self) -> None:
         command = self.commands.undo(self.document)
@@ -1240,19 +1489,82 @@ class MainWindow(QMainWindow):
         )
         self.commands.execute(AddClipCommand(clip), self.document)
         self.refresh_timeline_view()
+
+        # render the composition to a real WAV file the user can find
+        wav_note = ""
+        file_path = self._render_generation_to_file(composition, params)
+        if file_path is not None:
+            wav_note = f", WAV: {file_path}"
+            try:
+                import soundfile as sf
+
+                data, sr = sf.read(str(file_path), always_2d=True, dtype="float32")
+                self._player.load(data.T, sr)
+                wav_note += " (loaded in player)"
+            except Exception as exc:  # pragma: no cover - defensive
+                self.statusBar().showMessage(f"Playback load failed: {exc}", 6000)
+
         library_note = ""
         try:
-            item = self.library.register_composition(composition, params)
+            item = self.library.register_composition(
+                composition, params,
+                audio_path=str(file_path) if file_path is not None else None,
+            )
             library_note = f", saved to library #{item.id}"
         except ValidationError:
             library_note = ""
         self.statusBar().showMessage(
             f"Generated {composition.fingerprint} — {composition.bpm:.0f} BPM "
             f"{composition.key_name}, repetition score "
-            f"{composition.repetition_score:.1f}{library_note}",
-            10000,
+            f"{composition.repetition_score:.1f}{library_note}{wav_note}",
+            12000,
         )
         return clip
+
+    def _render_generation_to_file(self, composition, params) -> Path | None:
+        """Write the mixdown WAV into the Generate page's output folder."""
+        from PySide6.QtWidgets import QApplication
+
+        out_dir = self.generate_page.output_dir()
+        status = self.statusBar()
+        try:
+            out_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            status.showMessage(f"Output folder unusable ({exc}); skipped file save", 8000)
+            return None
+
+        stamp = __import__("datetime").datetime.now().strftime("%H%M%S")
+        file_path = out_dir / (
+            f"LFMS-{humanize(params.genre).replace(' ', '')}"
+            f"-{params.seed}-{stamp}.wav"
+        )
+        renderer = CompositionRenderer(composition)
+        button = self.generate_page.generate_button
+        button.setEnabled(False)
+
+        def progress(fraction: float) -> None:
+            status.showMessage(
+                f"Rendering WAV… {fraction * 100:.0f}% → {file_path.name}"
+            )
+            QApplication.processEvents()
+
+        try:
+            renderer.render(file_path, container="WAV", bit_depth=16,
+                            on_progress=progress)
+        except Exception as exc:
+            status.showMessage(f"WAV render failed: {exc}", 8000)
+            return None
+        finally:
+            button.setEnabled(True)
+        return file_path
+
+    # --------------------------------------------- timeline edit handlers
+
+    def _on_clip_moved(self, clip_id: str, new_start: float) -> None:
+        self.commands.execute(MoveClipCommand(clip_id, new_start), self.document)
+
+    def _on_clip_delete(self, clip_id: str) -> None:
+        self.commands.execute(RemoveClipCommand(clip_id), self.document)
 
     def _on_generate(self, payload: dict) -> None:
         try:
