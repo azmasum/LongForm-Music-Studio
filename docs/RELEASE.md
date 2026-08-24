@@ -102,3 +102,16 @@ gh release create v1.0.0 releases\LongFormMusicStudio-1.0.0-portable.zip `
 
 For future releases repeat only: bump version → changelog → tests/ruff →
 `installer\build_portable.ps1` → tag → `gh release create`.
+
+## v1.1.0 (published 2026-08-24)
+
+- Changes: MP3/OGG export, generated audio saved to a user-chosen folder
+  (default Downloads) and loaded into the transport player, interactive
+  timeline clips (select/drag/delete), Mix & Timeline usage hints,
+  player deadlock fix. 352 tests green.
+- Release: <https://github.com/azmasum/LongForm-Music-Studio/releases/tag/v1.1.0>
+- `LongFormMusicStudio-1.1.0-portable.zip` — 85.8 MB —
+  SHA256 `44C15D9CCAF91A499644DAC7B3036872E439C288F6EEB6BC40CE60B1C861F8D1`
+- `LongFormMusicStudio-1.1.0-setup.exe` — 54.0 MB —
+  SHA256 `BA7894713693F8D94B7B626E9403CABE536EE31DDA587EC4300988E080372D46`
+- Frozen self-checks passed (`--version` → 1.1.0, `LFMS_SELF_CHECK=1`).

@@ -3,7 +3,7 @@
 All notable changes are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: semver.
 
-## [Unreleased]
+## [1.1.0] — 2026-08-24
 
 ### Added
 - **MP3 and OGG export** on the Export & Provenance page (libsndfile 1.2+

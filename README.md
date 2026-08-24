@@ -4,8 +4,9 @@ Professional desktop application for creating **long-form background music**
 (10–120+ minutes) for YouTube, documentary, educational, meditation and podcast
 video creators. Offline-first, copyright-aware, built for Windows.
 
-> **Status: v1.0.0 — all 14 roadmap phases complete.**
-> The full MVP loop works end-to-end and is covered by 342 automated tests
+> **Status: v1.1.0 — MP3/OGG export + playback & timeline UX fixes; all 14
+> roadmap phases complete.**
+> The full MVP loop works end-to-end and is covered by 352 automated tests
 > (unit, integration, performance budgets, crash-recovery drills, offscreen
 > GUI). See [ROADMAP.md](ROADMAP.md) for the phase-by-phase record; features
 > marked below reflect what exists today — nothing is claimed as working
