@@ -17,7 +17,6 @@ from lfms.audio_engine.dsp import (
     soft_clip,
 )
 from lfms.audio_engine.formats import default_extension, resolve_sf_params
-from lfms.core.errors import ImportExportError
 
 
 class TestGainMath:
@@ -97,10 +96,10 @@ class TestFormatResolution:
         assert resolve_sf_params("FLAC", 32) == ("FLAC", "PCM_24")
         assert resolve_sf_params("OGG") == ("OGG", "VORBIS")
 
-    def test_mp3_raises_with_guidance(self) -> None:
-        with pytest.raises(ImportExportError) as excinfo:
-            resolve_sf_params("MP3", 320)
-        assert "FFmpeg" in excinfo.value.message
+    def test_mp3_resolves_to_libsndfile_encoder(self) -> None:
+        # libsndfile >= 1.1 can encode MP3 directly; no FFmpeg fallback needed.
+        assert resolve_sf_params("MP3", 320) == ("MP3", "MPEG_LAYER_III")
+        assert resolve_sf_params("MP3") == ("MP3", "MPEG_LAYER_III")
 
     def test_default_extension(self) -> None:
         assert default_extension("WAV") == "wav"

@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 import pytest
+import soundfile as sf
 
 from lfms.core.errors import ValidationError
 from lfms.exporter import export_item
@@ -93,6 +94,39 @@ def test_export_supports_flac_container(lib, tmp_path: Path):
     outcome = export_item(lib, source.id, out, container="FLAC")
     assert outcome.final_path.suffix == ".flac"
     assert outcome.final_path.is_file()
+
+
+@pytest.mark.parametrize(
+    "container,suffix,sf_format",
+    [("WAV", ".wav", "WAV"), ("FLAC", ".flac", "FLAC"),
+     ("OGG", ".ogg", "OGG"), ("MP3", ".mp3", "MP3")],
+)
+def test_lossy_and_pcm_containers_round_trip(
+    lib, tmp_path: Path, container, suffix, sf_format
+):
+    if not sf.check_format(sf_format):
+        pytest.skip(f"libsndfile build cannot write {sf_format}")
+    source = _register(lib, seed=41, duration=6.0)
+    out = tmp_path / f"{container}-out"
+    out.mkdir()
+    outcome = export_item(lib, source.id, out, container=container)
+    assert outcome.final_path.suffix == suffix
+    info = sf.info(str(outcome.final_path))
+    assert info.format.upper() == sf_format
+    assert abs(info.duration - 6.0) < 0.5  # encoder padding on lossy formats
+    # delivered audio still decodes and is mastered near the preset
+    data, sr = sf.read(str(outcome.final_path), always_2d=True, dtype="float32")
+    m = measure(data.T, sr)
+    assert m.integrated_lufs > -40.0
+
+
+def test_resolve_sf_params_all_containers():
+    from lfms.audio_engine.formats import resolve_sf_params
+
+    assert resolve_sf_params("MP3") == ("MP3", "MPEG_LAYER_III")
+    assert resolve_sf_params("OGG") == ("OGG", "VORBIS")
+    assert resolve_sf_params("FLAC", 16) == ("FLAC", "PCM_16")
+    assert resolve_sf_params("WAV", 32) == ("WAV", "FLOAT")
 
 
 def test_export_rejects_missing_directory_and_bad_items(lib, tmp_path: Path):

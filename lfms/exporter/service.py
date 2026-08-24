@@ -21,7 +21,7 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 
-from lfms.audio_engine.formats import resolve_sf_params
+from lfms.audio_engine.formats import default_extension, resolve_sf_params
 from lfms.core.errors import RenderCancelled, ValidationError
 from lfms.generator.composer import Composer
 from lfms.generator.plan import GenerationParameters, params_from_payload
@@ -121,7 +121,7 @@ def _export_core(
         report(0.8)
 
         fmt, subtype = resolve_sf_params(container, bit_depth)
-        extension = {"WAV": ".wav", "FLAC": ".flac"}.get(fmt.upper(), ".wav")
+        extension = f".{default_extension(container)}"
         final_path = out_dir / f"{_safe_stem(item.title)} [{target.name}]{extension}"
         sf.write(
             str(final_path),
