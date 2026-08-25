@@ -345,6 +345,11 @@ class GeneratePage(QWidget):
         self.seed.setDecimals(0)
         self.seed.setValue(float(random.randrange(1, 1_000_000)))
         self.randomize = QPushButton("Random seed")
+        self.auto_seed = QCheckBox("New seed every generate")
+        self.auto_seed.setChecked(True)
+        self.auto_seed.setToolTip(
+            "Unchecked = reuse the seed above and get the identical track again"
+        )
         seed_row = QHBoxLayout()
         seed_row.addWidget(self.seed, stretch=1)
         seed_row.addWidget(self.randomize)
@@ -374,7 +379,10 @@ class GeneratePage(QWidget):
         intensity_row.addWidget(self.intensity, stretch=1)
         intensity_row.addWidget(self.intensity_value)
 
-        form.addRow("Seed", seed_row)
+        seed_outer = QVBoxLayout()
+        seed_outer.addLayout(seed_row)
+        seed_outer.addWidget(self.auto_seed)
+        form.addRow("Seed", seed_outer)
         form.addRow("Genre", self.genre)
         form.addRow("Mood", self.mood)
         form.addRow("Duration", self.duration)
@@ -478,6 +486,8 @@ class GeneratePage(QWidget):
             return
         params = suggestion.params
         self.seed.setValue(float(params.seed))
+        # a suggested seed is explicit intent: pin it (disable auto-roll)
+        self.auto_seed.setChecked(False)
         genre_index = self.genre.findData(params.genre)
         if genre_index >= 0:
             self.genre.setCurrentIndex(genre_index)
@@ -493,6 +503,9 @@ class GeneratePage(QWidget):
         status.showMessage(message[:180], 12000)
 
     def current_parameters(self) -> dict:
+        if self.auto_seed.isChecked():
+            fresh = float(random.randrange(1, 2_147_483_000))
+            self.seed.setValue(fresh)
         return {
             "seed": int(self.seed.value()),
             "genre": self.genre.currentData(),

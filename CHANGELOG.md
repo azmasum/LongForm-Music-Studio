@@ -3,6 +3,22 @@
 All notable changes are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: semver.
 
+## [Unreleased]
+
+### Added
+- **Instrument palette expanded from 7 to 15 voices**: new Strings ensemble,
+  Choir, Organ, Electric Piano, Marimba, Karplus-Strong nylon guitar,
+  Saw Bass and Snare backbeat. Every genre now picks its lead/pad/bass
+  instrument from a seed-driven palette, so two tracks in the same genre no
+  longer share one fixed lead sound.
+- Generate page: **"New seed every generate"** checkbox (on by default).
+  Pressing Generate repeatedly now produces a different track each time;
+  uncheck it to reproduce a track exactly. Applying an AI-director
+  suggestion pins that suggestion's seed automatically.
+
+### Changed
+- Generator version bumped to `lfms-gen-0.3.0` (fingerprints change).
+
 ## [1.1.0] — 2026-08-24
 
 ### Added

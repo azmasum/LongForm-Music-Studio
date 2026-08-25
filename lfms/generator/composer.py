@@ -58,7 +58,7 @@ class PadGenerator:
                         midi=int(midi),
                         velocity=velocity,
                         role="PAD",
-                        instrument="PAD",
+                        instrument=getattr(self.plan, "pad_instrument", "PAD"),
                     )
                 )
         return events
@@ -100,7 +100,7 @@ class BassGenerator:
                         midi=bass_midi,
                         velocity=velocity,
                         role="BASS",
-                        instrument="BASS",
+                        instrument=getattr(self.plan, "bass_instrument", "BASS"),
                     )
                 )
         return events
@@ -199,6 +199,19 @@ class PulseGenerator:
                             )
                         )
                     hat_time += hat_step
+            if getattr(self.plan, "perc_snare", False) and level > 0.30:
+                for backbeat in (time + beat, time + 3 * beat):
+                    if backbeat < limit - 1e-9:
+                        events.append(
+                            NoteEvent(
+                                start_sec=max(0.0, backbeat + float(self._rng.uniform(-jitter, jitter))),
+                                duration_sec=0.22,
+                                midi=38,
+                                velocity=float(np.clip(26.0 + 30.0 * level, 12.0, 80.0)),
+                                role="PULSE",
+                                instrument="SNARE",
+                            )
+                        )
             time += bar_sec
         return [
             event

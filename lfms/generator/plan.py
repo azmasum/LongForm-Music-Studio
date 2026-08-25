@@ -90,6 +90,46 @@ _MOOD_MODIFIERS: dict[str, dict[str, float]] = {
 
 VALID_MODES = tuple(m for m in KeyMode if m.value != "CUSTOM")
 
+# Seed-picked instrument palettes per genre family. The first entry is the
+# classic sound for the genre; further entries give each seed variety.
+_INSTRUMENT_FAMILIES: dict[str, dict[str, tuple[str, ...]]] = {
+    "AMBIENT": {"melody": ("PLUCK", "BELL", "MARIMBA", "NYLON"), "pad": ("PAD", "STRINGS", "CHOIR"), "bass": ("BASS", "SAW_BASS")},
+    "CALM": {"melody": ("PLUCK", "NYLON", "MARIMBA"), "pad": ("PAD", "STRINGS"), "bass": ("BASS",)},
+    "MEDITATION": {"melody": ("BELL", "PLUCK", "MARIMBA"), "pad": ("CHOIR", "PAD"), "bass": ("BASS",)},
+    "RELAXATION": {"melody": ("PLUCK", "NYLON", "EPIANO"), "pad": ("PAD", "STRINGS"), "bass": ("BASS",)},
+    "NATURE": {"melody": ("NYLON", "PLUCK", "MARIMBA"), "pad": ("STRINGS", "PAD"), "bass": ("BASS", "NYLON")},
+    "DARK": {"melody": ("PLUCK", "MARIMBA", "BELL"), "pad": ("STRINGS", "CHOIR"), "bass": ("SAW_BASS", "BASS")},
+    "SUSPENSE": {"melody": ("PLUCK", "MARIMBA"), "pad": ("STRINGS", "PAD"), "bass": ("BASS", "SAW_BASS")},
+    "MYSTERY": {"melody": ("BELL", "MARIMBA", "PLUCK"), "pad": ("CHOIR", "STRINGS"), "bass": ("BASS",)},
+    "PSYCHOLOGICAL": {"melody": ("PLUCK", "BELL"), "pad": ("STRINGS", "PAD"), "bass": ("SAW_BASS", "BASS")},
+    "HORROR": {"melody": ("PLUCK", "BELL"), "pad": ("CHOIR", "STRINGS"), "bass": ("SAW_BASS",)},
+    "CINEMATIC": {"melody": ("PIANO", "NYLON", "BELL"), "pad": ("STRINGS", "CHOIR", "PAD"), "bass": ("BASS", "NYLON")},
+    "EMOTIONAL": {"melody": ("PIANO", "EPIANO", "NYLON"), "pad": ("STRINGS", "CHOIR"), "bass": ("BASS",)},
+    "DRAMATIC": {"melody": ("PIANO", "NYLON", "PLUCK"), "pad": ("STRINGS", "CHOIR"), "bass": ("BASS", "SAW_BASS")},
+    "STORYTELLING": {"melody": ("PIANO", "NYLON", "PLUCK"), "pad": ("PAD", "STRINGS"), "bass": ("BASS",)},
+    "CLASSICAL_INSPIRED": {"melody": ("PIANO", "NYLON", "MARIMBA"), "pad": ("STRINGS", "PAD"), "bass": ("BASS", "NYLON")},
+    "DOCUMENTARY": {"melody": ("PIANO", "PLUCK", "MARIMBA"), "pad": ("PAD", "ORGAN", "STRINGS"), "bass": ("BASS", "SAW_BASS")},
+    "CORPORATE": {"melody": ("PLUCK", "EPIANO", "PIANO"), "pad": ("PAD", "ORGAN"), "bass": ("BASS", "SAW_BASS")},
+    "NEWS": {"melody": ("PLUCK", "EPIANO", "MARIMBA"), "pad": ("ORGAN", "PAD"), "bass": ("SAW_BASS", "BASS")},
+    "EDUCATIONAL": {"melody": ("MARIMBA", "PLUCK", "EPIANO"), "pad": ("PAD", "ORGAN"), "bass": ("BASS",)},
+    "PODCAST": {"melody": ("NYLON", "PLUCK", "EPIANO"), "pad": ("PAD", "ORGAN"), "bass": ("BASS",)},
+    "INSPIRATIONAL": {"melody": ("PIANO", "EPIANO", "PLUCK"), "pad": ("STRINGS", "ORGAN", "PAD"), "bass": ("BASS",)},
+    "MOTIVATIONAL": {"melody": ("PIANO", "EPIANO", "PLUCK"), "pad": ("STRINGS", "ORGAN"), "bass": ("SAW_BASS", "BASS")},
+    "TECHNOLOGY": {"melody": ("BELL", "EPIANO", "MARIMBA"), "pad": ("CHOIR", "PAD"), "bass": ("SAW_BASS",)},
+    "FUTURISTIC": {"melody": ("BELL", "EPIANO", "PLUCK"), "pad": ("CHOIR", "PAD"), "bass": ("SAW_BASS",)},
+    "ELECTRONIC": {"melody": ("PLUCK", "EPIANO", "BELL"), "pad": ("PAD", "CHOIR", "ORGAN"), "bass": ("SAW_BASS",)},
+    "MINIMAL": {"melody": ("PLUCK", "MARIMBA", "BELL"), "pad": ("PAD",), "bass": ("SAW_BASS", "BASS")},
+    "PIANO": {"melody": ("PIANO", "EPIANO"), "pad": ("PAD", "STRINGS"), "bass": ("BASS",)},
+    "ACOUSTIC": {"melody": ("NYLON", "PIANO", "PLUCK"), "pad": ("PAD", "STRINGS"), "bass": ("BASS", "NYLON")},
+    "LOFI": {"melody": ("EPIANO", "PIANO", "NYLON"), "pad": ("PAD", "CHOIR"), "bass": ("BASS",)},
+    "CHILL": {"melody": ("PLUCK", "EPIANO", "NYLON"), "pad": ("PAD", "CHOIR"), "bass": ("BASS", "SAW_BASS")},
+}
+_DEFAULT_FAMILY = {
+    "melody": ("PLUCK", "PIANO", "BELL"),
+    "pad": ("PAD", "STRINGS"),
+    "bass": ("BASS",),
+}
+
 
 @dataclass
 class GenerationParameters:
@@ -162,8 +202,11 @@ class MusicPlan:
     register_center: int
     reverb_amount: float
     melody_instrument: str
-    sample_rate: int
-    voiceover_safe: bool
+    pad_instrument: str = "PAD"
+    bass_instrument: str = "BASS"
+    perc_snare: bool = False
+    sample_rate: int = DEFAULT_SAMPLE_RATE
+    voiceover_safe: bool = False
     fingerprint: str = field(default="")
 
     @property
@@ -216,6 +259,17 @@ def build_plan(params: GenerationParameters) -> MusicPlan:
     register = int(np.clip(register, 36, 72))
     reverb = float(np.clip(reverb, 0.0, 1.0))
 
+    # Seed-driven instrument palette: same genre, different seeds get
+    # different lead/pad/bass voices so tracks do not all sound alike.
+    inst_rng = np.random.default_rng(
+        SeedSystem(int(params.seed)).derive("instruments")
+    )
+    family = _INSTRUMENT_FAMILIES.get(params.genre, _DEFAULT_FAMILY)
+    melody_inst = str(family["melody"][int(inst_rng.integers(0, len(family["melody"])))])
+    pad_inst = str(family["pad"][int(inst_rng.integers(0, len(family["pad"])))])
+    bass_inst = str(family["bass"][int(inst_rng.integers(0, len(family["bass"])))])
+    snare = bool(pulse > 0.30 and inst_rng.random() < min(1.0, pulse))
+
     plan_fingerprint = fingerprint(
         [
             "PLAN",
@@ -244,7 +298,10 @@ def build_plan(params: GenerationParameters) -> MusicPlan:
         melody_probability=melody_prob,
         register_center=register,
         reverb_amount=reverb,
-        melody_instrument=profile.melody_instrument,
+        melody_instrument=melody_inst,
+        pad_instrument=pad_inst,
+        bass_instrument=bass_inst,
+        perc_snare=snare,
         sample_rate=int(params.sample_rate),
         voiceover_safe=bool(params.voiceover_safe),
         fingerprint=plan_fingerprint,

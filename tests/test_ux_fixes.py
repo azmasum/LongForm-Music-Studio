@@ -130,6 +130,20 @@ def test_mix_page_hint_and_strips(qapp, tmp_path):
     assert any("mute" in t.lower() and "solo" in t.lower() for t in texts)
 
 
+def test_auto_seed_rolls_fresh_seed_per_generate(qapp, tmp_path):
+    window = _window(tmp_path)
+    page = window.generate_page
+    assert page.auto_seed.isChecked()
+    first = page.current_parameters()["seed"]
+    second = page.current_parameters()["seed"]
+    assert first != second
+    # uncheck -> seed becomes stable (repeat-the-same-track workflow)
+    page.auto_seed.setChecked(False)
+    fixed = page.current_parameters()["seed"]
+    assert page.current_parameters()["seed"] == fixed
+    assert page.current_parameters()["seed"] == int(page.seed.value())
+
+
 def test_buffer_player_position_math_without_device():
     import numpy as np
 

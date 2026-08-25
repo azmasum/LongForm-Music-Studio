@@ -85,8 +85,9 @@ python -m lfms.app
 
 | Field | মানে |
 | --- | --- |
-| **Seed** | একই seed = হুবহু একই মিউজিক, যতবার খুশি regenerate করুন। ভিন্ন রেজাল্ট চাইলে **Random seed** চাপুন |
+| **Seed** | একই seed = হুবহু একই মিউজিক। **New seed every generate** টিক থাকলে (default) প্রতিবার Generate-এ নতুন গান হবে; reproduce করতে চাইলে টিক তুলে ফিক্সড seed ব্যবহার করুন বা **Random seed** চাপুন |
 | **Genre** | মিউজিকের ধরন — AMBIENT, LOFI, DOCUMENTARY ইত্যাদি |
+| **ইন্সট্রুমেন্ট** | seed অনুযায়ী ১৫টা synthesized voice থেকে lead/pad/bass বাছাই হয় — Piano, Electric Piano, Pluck, Nylon guitar, Bell, Marimba, Strings, Choir, Organ, Pad, Bass, Saw Bass, Kick, Hat, Snare |
 | **Mood** | আবহ — CALM, DREAMY, NEUTRAL ইত্যাদি |
 | **Duration** | মিনিট/সেকেন্ড — দীর্ঘ ভিডিওর জন্য যত দরকার |
 | **Intensity** | 0–100; কম = ধীর-শান্ত, বেশি = busy/dense |
