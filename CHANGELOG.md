@@ -6,6 +6,12 @@ All notable changes are documented here. Format based on
 ## [Unreleased]
 
 ### Added
+- **Reference-inspired generation**: pick any local audio file (or paste a
+  direct .mp3/.wav/.ogg/.flac URL) on the Generate page. LFMS analyses it
+  locally and borrows its tempo, key/mode, intensity and energy envelope to
+  compose a similar-style track whose melody is always original. Direct
+  links to streaming platforms (YouTube/Spotify/…) are refused by design —
+  export the audio yourself and use the file picker.
 - **Instrument palette expanded from 7 to 15 voices**: new Strings ensemble,
   Choir, Organ, Electric Piano, Marimba, Karplus-Strong nylon guitar,
   Saw Bass and Snare backbeat. Every genre now picks its lead/pad/bass
@@ -16,6 +22,14 @@ All notable changes are documented here. Format based on
   uncheck it to reproduce a track exactly. Applying an AI-director
   suggestion pins that suggestion's seed automatically.
 
+### Fixed
+- **Audio quality**: a stateful streaming limiter now keeps every render at
+  or below −0.26 dBFS continuously, replacing block-wise soft clipping that
+  caused clicks/buzz at block boundaries; 5 ms fade-in / 12 ms fade-out at
+  file boundaries remove end-of-file pops; gain staging of the Organ, Choir,
+  Electric-Piano, Strings and Saw-Bass voices tamed (less distortion when
+  sections stack); saw aliasing reduced; per-section velocity boost capped
+  at unity instead of +1 dB.
 ### Changed
 - Generator version bumped to `lfms-gen-0.3.0` (fingerprints change).
 

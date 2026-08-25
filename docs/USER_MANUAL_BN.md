@@ -99,6 +99,19 @@ timeline-এ চলে যাবে এবং library-তে নিজে নি
 **টিপ:** ভিডিওর নিচে ব্যাকগ্রাউন্ড হিসেবে দেওয়ার আগে export preset হিসেবে
 BACKGROUND_BED নিন (দেখুন §6) — ভয়েসওভারের সাথে লড়াই করবে না।
 
+### 3.1 Reference track — কারো গানের মতো করে (কপি নয়)
+
+Generate page-এ **"Reference track"** বক্সে যেকোনো অডিও ফাইল বাছলে (অথবা
+সরাসরি .mp3/.wav/.ogg/.flac লিংক দিলে) LFMS ফাইলটা লোকালি বিশ্লেষণ করে তার
+**BPM, key/mode, intensity, energy shape** ধার নিয়ে একই style-এর গান বানায়।
+
+- মিউজিক **হুবহু কপি হয় না** — melody সবসময় নতুন; reference-এর শুধু "রঙ" ব্যবহৃত হয়
+- বিশ্লেষণ সম্পূর্ণ offline, প্রথম ~৩ মিনিট যথেষ্ট
+- YouTube/Spotify-জাতীয় লিংক ইচ্ছাকৃতভাবে কাজ করে না — অডিওটা নিজে save/export
+  করে **Choose file…** দিয়ে দিন
+- Generate-এর পর library item-এ `ref:…` tag থাকবে — কোন গান থেকে অনুপ্রাণিত
+  তা পরে খুঁজে পাবেন
+
 ---
 
 ## 4. AI Music Director (ঐচ্ছিক)

@@ -53,6 +53,7 @@ from lfms.provenance import (
     verify_item,
     write_certificate,
 )
+from lfms.reference import analyze_file, download_audio, merge_into_payload
 from lfms.timeline import (
     AddClipCommand,
     AddTrackCommand,
@@ -405,6 +406,35 @@ class GeneratePage(QWidget):
         out_layout.addWidget(self.open_output_dir)
         outer.addWidget(out_box)
 
+        # ------------------------------------------- Reference track (style)
+        ref_box = QGroupBox(
+            "Reference track (optional — generates a SIMILAR style, never a copy)"
+        )
+        ref_layout = QVBoxLayout(ref_box)
+        ref_row = QHBoxLayout()
+        self.reference_edit = QLineEdit()
+        self.reference_edit.setReadOnly(True)
+        self.reference_edit.setPlaceholderText(
+            "Pick an audio file to borrow its tempo, key and mood…"
+        )
+        self.choose_reference = QPushButton("Choose file…")
+        self.reference_url = QPushButton("From URL…")
+        self.clear_reference = QPushButton("Clear")
+        self.clear_reference.setEnabled(False)
+        ref_row.addWidget(self.reference_edit, stretch=1)
+        ref_row.addWidget(self.choose_reference)
+        ref_row.addWidget(self.reference_url)
+        ref_row.addWidget(self.clear_reference)
+        ref_layout.addLayout(ref_row)
+        self.reference_info = QLabel(
+            "The reference is analysed locally; only its tempo/key/energy "
+            "shape guide the composer. Melodies are always original."
+        )
+        self.reference_info.setObjectName("muted")
+        self.reference_info.setWordWrap(True)
+        ref_layout.addWidget(self.reference_info)
+        outer.addWidget(ref_box)
+
         # ------------------------------------------------ AI Music Director
         director_box = QGroupBox("AI Music Director (optional — off by default)")
         director_layout = QVBoxLayout(director_box)
@@ -451,6 +481,9 @@ class GeneratePage(QWidget):
         self.generate_button.clicked.connect(self._emit_request)
         self.choose_output_dir.clicked.connect(self._choose_output_dir)
         self.open_output_dir.clicked.connect(self._open_output_dir)
+        self.choose_reference.clicked.connect(self._choose_reference_file)
+        self.reference_url.clicked.connect(self._choose_reference_url)
+        self.clear_reference.clicked.connect(self._clear_reference)
 
         from lfms.director import MusicDirector
 
@@ -540,6 +573,64 @@ class GeneratePage(QWidget):
         folder = self.output_dir()
         folder.mkdir(parents=True, exist_ok=True)
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
+
+    # --------------------------------------------- reference track style
+
+    @property
+    def reference_active(self) -> bool:
+        return bool(self.reference_edit.text().strip())
+
+    def set_reference(self, path: Path | str, summary: str = "") -> None:
+        self.reference_edit.setText(str(path))
+        self.clear_reference.setEnabled(True)
+        if summary:
+            self.reference_info.setText(summary)
+
+    def _choose_reference_file(self) -> None:
+        from PySide6.QtWidgets import QFileDialog
+
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Choose a reference audio file", "",
+            "Audio files (*.wav *.flac *.ogg *.mp3 *.aif* *.m4a);;All files (*)",
+        )
+        if not path:
+            return
+        try:
+            analysis = analyze_file(path)
+        except ValidationError as exc:
+            self.window().statusBar().showMessage(
+                f"Reference: {exc.message or exc}", 8000,
+            )
+            return
+        self.set_reference(path, analysis.summary())
+
+    def _choose_reference_url(self) -> None:
+        from PySide6.QtWidgets import QInputDialog
+
+        url, ok = QInputDialog.getText(
+            self, "Reference from URL",
+            "Direct link to an audio file (.mp3/.wav/.ogg/.flac):",
+        )
+        if not ok or not url.strip():
+            return
+        status = self.window().statusBar()
+        status.showMessage("Downloading reference…")
+        try:
+            path = download_audio(url.strip())
+            analysis = analyze_file(path)
+        except ValidationError as exc:
+            status.showMessage(f"Reference URL: {exc.message or exc}", 10000)
+            return
+        status.showMessage(f"Downloaded. {analysis.summary()}", 12000)
+        self.set_reference(path, analysis.summary())
+
+    def _clear_reference(self) -> None:
+        self.reference_edit.clear()
+        self.clear_reference.setEnabled(False)
+        self.reference_info.setText(
+            "The reference is analysed locally; only its tempo/key/energy "
+            "shape guide the composer. Melodies are always original."
+        )
 
 
 class BatchPage(QWidget):
@@ -1522,7 +1613,11 @@ class MainWindow(QMainWindow):
             item = self.library.register_composition(
                 composition, params,
                 audio_path=str(file_path) if file_path is not None else None,
+                extra_tags=tuple(
+                    t for t in (getattr(self, "_active_reference_tag", ""),) if t
+                ),
             )
+            self._active_reference_tag = ""
             library_note = f", saved to library #{item.id}"
         except ValidationError:
             library_note = ""
@@ -1581,9 +1676,31 @@ class MainWindow(QMainWindow):
 
     def _on_generate(self, payload: dict) -> None:
         try:
+            payload = self._apply_reference(payload)
             self.generate_from_payload(payload)
         except Exception as exc:  # pragma: no cover - defensive UI guard
             self.statusBar().showMessage(f"Generation failed: {exc}", 8000)
+
+    def _apply_reference(self, payload: dict) -> dict:
+        """If a reference track is set, borrow its style parameters."""
+        if not self.generate_page.reference_active:
+            return payload
+        status = self.statusBar()
+        source = self.generate_page.reference_edit.text().strip()
+        status.showMessage("Analysing reference track…")
+        QApplication.processEvents()
+        try:
+            analysis = analyze_file(source)
+        except ValidationError as exc:
+            status.showMessage(f"Reference ignored: {exc.message or exc}", 8000)
+            return payload
+        merged = merge_into_payload(payload, analysis)
+        self._active_reference_tag = f"ref:{analysis.source_hash}"
+        status.showMessage(
+            f"Inspired by {Path(analysis.source).name} — "
+            f"{analysis.summary()}. Melody is original.", 14000,
+        )
+        return merged
 
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt naming
         self.batch_page.queue.stop()
