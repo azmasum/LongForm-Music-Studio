@@ -3,7 +3,7 @@
 All notable changes are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: semver.
 
-## [Unreleased]
+## [1.2.0] — 2026-08-26
 
 ### Added
 - **Reference-inspired generation**: pick any local audio file (or paste a

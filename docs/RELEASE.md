@@ -103,6 +103,20 @@ gh release create v1.0.0 releases\LongFormMusicStudio-1.0.0-portable.zip `
 For future releases repeat only: bump version → changelog → tests/ruff →
 `installer\build_portable.ps1` → tag → `gh release create`.
 
+## v1.2.0 (published 2026-08-26)
+
+- Changes: 15-instrument palette with seed-driven voice selection,
+  reference-inspired generation (tempo/key/energy borrowed from any audio
+  file or direct URL; melodies always original), streaming limiter +
+  de-click fades + voice gain staging (no more clicks/buzz/distortion),
+  auto-seed on generate. 387 tests green.
+- Release: <https://github.com/azmasum/LongForm-Music-Studio/releases/tag/v1.2.0>
+- `LongFormMusicStudio-1.2.0-portable.zip` — 85.8 MB —
+  SHA256 `C711B643BF832B9F82F49FB766E42E38470629B25C7BF7C5AA7C98B5AE11479F`
+- `LongFormMusicStudio-1.2.0-setup.exe` — 54.0 MB —
+  SHA256 `C26C1C768FB12E1C85B3EBAF0E6506759F41A928CC0DEF3D50017948DEE77A7C`
+- Frozen self-checks passed (`--version` → 1.2.0, `LFMS_SELF_CHECK=1`).
+
 ## v1.1.0 (published 2026-08-24)
 
 - Changes: MP3/OGG export, generated audio saved to a user-chosen folder
