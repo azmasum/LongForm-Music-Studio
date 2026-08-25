@@ -43,6 +43,44 @@ def soft_clip(x: np.ndarray, threshold: float = 0.95) -> np.ndarray:
     return out
 
 
+class Limiter:
+    """Stateful streaming brickwall-ish limiter for offline rendering.
+
+    Tracks a smoothed gain across blocks (fast attack, slow release) so the
+    ceiling is respected *continuously* — unlike block-wise soft_clip, which
+    produces discontinuities at block boundaries (audible as clicks/buzz).
+    A final soft_clip pass catches any residual intra-block transient.
+    """
+
+    def __init__(self, sample_rate: int, *, ceiling: float = 0.97,
+                 attack_ms: float = 2.0, release_ms: float = 90.0) -> None:
+        self.ceiling = clamp(float(ceiling), 0.5, 0.999)
+        self._attack_coef = math.exp(-1000.0 / (max(0.01, attack_ms) * sample_rate))
+        self._release_coef = math.exp(-1000.0 / (max(1.0, release_ms) * sample_rate))
+        self._gain = 1.0
+
+    def process(self, x: np.ndarray) -> np.ndarray:
+        if x.size == 0:
+            return x
+        block_peak = float(np.max(np.abs(x)))
+        needed = self.ceiling / max(block_peak, self.ceiling)
+        target = min(1.0, needed)
+        coef = self._attack_coef if target < self._gain else self._release_coef
+        self._gain = target + (self._gain - target) * coef
+        out = x * self._gain
+        # continuous asymptotic safety net; maps everything above the
+        # ceiling into [ceiling, ceiling] so the output NEVER exceeds it
+        ax = np.abs(out)
+        if float(np.max(ax)) > self.ceiling:
+            t = self.ceiling
+            span = max(1e-6, 1.0 - t)
+            over = ax > t
+            mag = ax[over]
+            shaped = t + (self.ceiling - t) * np.tanh((mag - t) / span)
+            out[over] = np.sign(out[over]) * np.minimum(shaped, self.ceiling)
+        return out
+
+
 def peak(x: np.ndarray) -> float:
     if x.size == 0:
         return 0.0

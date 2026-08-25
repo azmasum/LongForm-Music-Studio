@@ -103,10 +103,10 @@ class TestRenderBasics:
         loud.create_track("loud", ToneSource(SR, frequency=100.0), volume_db=+12.0)
         safe = tmp_path / "safe.wav"
         result = OfflineRenderer().render(loud, safe, 0.4)
-        assert result.peak > 1.0
+        # the streaming limiter now keeps everything at/below its ceiling
+        assert result.peak <= 0.98
         data, _ = sf.read(str(safe), dtype="float64")
         assert float(np.max(np.abs(data))) <= 1.0 + 1e-6
-        assert any("full scale" in w for w in result.warnings)
 
     def test_block_shape_mismatch_raises(self, tmp_path: Path) -> None:
         class BrokenGraph:

@@ -10,7 +10,7 @@ import numpy as np
 import soundfile as sf
 
 from lfms.audio_engine.context import RenderContext
-from lfms.audio_engine.dsp import peak, soft_clip
+from lfms.audio_engine.dsp import Limiter, peak
 from lfms.audio_engine.formats import resolve_sf_params
 from lfms.audio_engine.graph import AudioGraph
 from lfms.audio_engine.jobcontrol import RenderJobControl
@@ -68,6 +68,9 @@ class OfflineRenderer:
         path = Path(dest_path)
         path.parent.mkdir(parents=True, exist_ok=True)
         ctx = RenderContext(sample_rate=sr, channels=ch)
+        limiter = Limiter(sr) if safety_limit else None
+        fade_in = max(1, int(0.005 * sr))   # 5 ms de-click at file start
+        fade_out = max(1, int(0.012 * sr))  # 12 ms de-click at file end
         started = time.perf_counter()
         written = 0
         sum_squares = 0.0
@@ -94,11 +97,23 @@ class OfflineRenderer:
                             technical=f"expected {(ch, n)}, got {tuple(block.shape)}",
                         )
                     data = block.astype(np.float64)
+                    if limiter is not None:
+                        data = limiter.process(data)
+                    # global de-click fades at the file boundaries
+                    block_end = written + n
+                    if written < fade_in:
+                        idx = np.arange(written, min(block_end, fade_in))
+                        ramp = (idx + 1) / fade_in
+                        data[:, : len(idx)] *= ramp[None, :]
+                    if block_end > total_frames - fade_out:
+                        start = max(written, total_frames - fade_out)
+                        idx = np.arange(start - written, n)
+                        remaining = np.arange(0, block_end - start)
+                        ramp = 1.0 - (remaining + 1) / fade_out
+                        data[:, idx] *= np.maximum(ramp, 0.0)[None, :]
                     chunk_peak = peak(data)
                     max_peak = max(max_peak, chunk_peak)
                     sum_squares += float(np.sum(np.square(data)))
-                    if safety_limit and chunk_peak > 1.0:
-                        data = soft_clip(data)
                     handle.write(np.ascontiguousarray(data.T).astype(np.float32))
                     written += n
                     ctx.advance(n)

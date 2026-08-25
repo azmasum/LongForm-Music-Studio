@@ -154,7 +154,9 @@ def _with_velocity(event: NoteEvent, scale: float) -> NoteEvent:
 def _scale_for(absolute_start: float, spans: list[SectionSpan]) -> float:
     for span in spans:
         if span.start_sec <= absolute_start < span.end_sec:
-            return 0.72 + 0.38 * span.energy
+            # cap at 1.0: velocity boosts above full scale push mixes into
+            # the limiter and read as distortion
+            return 0.70 + 0.30 * span.energy
     return 1.0
 
 

@@ -278,16 +278,17 @@ class StringsVoice(VoiceBase):
         freq = midi_to_freq(self.note.midi)
         self.osc = Oscillator(
             self.sample_rate, wave="SAW", frequency=freq,
-            unison_voices=3, detune_cents=14.0,
+            unison_voices=3, detune_cents=9.0,
         )
-        cutoff = min(float(self.timbre.get("brightness_hz", 1800.0)) * 1.2, 6000.0)
-        self.filter = BiquadFilter(self.sample_rate, kind="lowpass", cutoff=cutoff, q=0.5)
+        # keep the cutoff modest: raw saw harmonics past Nyquist alias as buzz
+        cutoff = min(float(self.timbre.get("brightness_hz", 1800.0)) * 1.0, 4500.0)
+        self.filter = BiquadFilter(self.sample_rate, kind="lowpass", cutoff=cutoff, q=0.4)
 
     def _osc(self, n: int) -> np.ndarray:
         return self.osc.process(n)
 
     def _shape(self, signal: np.ndarray) -> np.ndarray:
-        return self.filter.process(signal)
+        return self.filter.process(signal) * 0.82
 
 
 class ChoirVoice(VoiceBase):
@@ -316,7 +317,7 @@ class ChoirVoice(VoiceBase):
         return self.osc.process(n)
 
     def _shape(self, signal: np.ndarray) -> np.ndarray:
-        shaped = 0.65 * signal + 0.35 * self.formant.process(signal)
+        shaped = 0.55 * signal + 0.25 * self.formant.process(signal)
         return self.tame.process(shaped)
 
 
@@ -337,9 +338,9 @@ class OrganVoice(VoiceBase):
 
     def _osc(self, n: int) -> np.ndarray:
         return (
-            self.main.process(n) * 0.55
-            + self.oct2.process(n) * 0.30
-            + self.oct3.process(n) * 0.15
+            self.main.process(n) * 0.42
+            + self.oct2.process(n) * 0.22
+            + self.oct3.process(n) * 0.11
         )
 
 
@@ -361,8 +362,8 @@ class EPianoVoice(VoiceBase):
         self.tine_env = ADSR(self.sample_rate, attack=0.001, decay=0.18, sustain=0.0, release=0.1)
 
     def _osc(self, n: int) -> np.ndarray:
-        tine = self.tine_osc.process(n) * self.tine_env.process(n) * 0.30
-        return self.carrier.process(n) * 0.95 + tine
+        tine = self.tine_osc.process(n) * self.tine_env.process(n) * 0.20
+        return self.carrier.process(n) * 0.80 + tine
 
 
 class MarimbaVoice(VoiceBase):
