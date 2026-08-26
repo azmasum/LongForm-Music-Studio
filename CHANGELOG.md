@@ -67,6 +67,22 @@ All notable changes are documented here. Format based on
   - All effects are stateful streaming (no clicks on parameter changes);
     `EqEffect`, `CompressorEffect`, `DelayEffect`, `ReverbEffect` all
     support `to_dict()` serialization.
+- **Score / Chords (Phase E studio roadmap)**:
+  - **Music theory model** (`lfms.music.chords`) — `note_name` / `parse_note`,
+    `Scale` (15 modes including major/minor/pentatonic/blues/whole-tone),
+    `Chord` with 18 voicing types and inversions, `Chord.from_symbol`
+    parser ("Am7", "C#dim", "Gsus4" etc.), `Chord.symbol` display.
+  - **Progression engine** — 11 built-in presets (I-IV-V-I, I-V-vi-IV,
+    ii-V-I, 12-bar-blues, Canon, etc.); `Progression` dataclass with
+    key/mode/bpm/time-sig; `chord_symbols()` returns human-readable
+    symbols for the current key.
+  - **Progression → MIDI** — `progression_to_midi_clip()` converts any
+    progression to a `MidiClip` with chord voicings; rhythm modes:
+    whole-note, half, quarter, arpeggio.
+  - **Chord progression GUI** (`lfms.app.chord_panel`) — key/mode
+    selector, progression picker, BPM/bars spinboxes, chord chart
+    display (colored boxes per bar), "Generate MIDI" button that emits
+    a `MidiClip` signal.
 
 ### Changed
 - `TrackStrip` now exposes a `volume_envelope` hook for time-varying

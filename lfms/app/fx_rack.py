@@ -180,7 +180,10 @@ class EffectWidget(QFrame):
         self._param_widgets: dict[str, QWidget] = {}
 
         for param_name, label_text in labels.items():
-            value = slot.params.get(param_name, EFFECT_DEFAULTS.get(slot.effect_type, {}).get(param_name, 0))
+            default_val = EFFECT_DEFAULTS.get(slot.effect_type, {}).get(
+                param_name, 0
+            )
+            value = slot.params.get(param_name, default_val)
             if param_name == "ping_pong":
                 cb = QCheckBox()
                 cb.setChecked(bool(value))

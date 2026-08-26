@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QSlider,
     QSpinBox,
     QStackedWidget,
+    QTabWidget,
     QTableWidget,
     QTableWidgetItem,
     QTextBrowser,
@@ -36,6 +37,10 @@ from PySide6.QtWidgets import (
 )
 
 from lfms.app.theme import ACCENT, BORDER, POSITIVE, TEXT_DIM
+from lfms.app.piano_roll import PianoRollWidget
+from lfms.app.drum_grid import DrumGridWidget
+from lfms.app.fx_rack import FxRackWidget
+from lfms.app.chord_panel import ProgressionWidget
 from lfms.audio_engine.playback import BufferPlayer
 from lfms.core.enums import Genre, Mood
 from lfms.core.errors import AudioDeviceError, ValidationError
@@ -366,6 +371,7 @@ class TimelineCanvas(QWidget):
 
 class GeneratePage(QWidget):
     generate_requested = Signal(dict)
+    midi_generated = Signal(object)  # MidiClip from chord progression
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -510,6 +516,14 @@ class GeneratePage(QWidget):
         director_layout.addWidget(self.director_prompt)
         director_layout.addLayout(suggest_button_row)
         outer.addWidget(director_box)
+
+        # Chord Progression section
+        chord_box = QGroupBox("Chord Progression (optional — generates a MIDI clip)")
+        chord_lay = QVBoxLayout(chord_box)
+        self._progression_widget = ProgressionWidget()
+        self._progression_widget.midi_generated.connect(self.midi_generated.emit)
+        chord_lay.addWidget(self._progression_widget)
+        outer.addWidget(chord_box)
 
         self.generate_button = QPushButton("Generate into timeline")
         self.generate_button.setObjectName("primary")
@@ -787,8 +801,12 @@ class BatchPage(QWidget):
         self.pause_button.clicked.connect(self._toggle_pause)
         self.cancel_button.clicked.connect(lambda: self._act_on_selection(self.queue.cancel))
         self.retry_button.clicked.connect(lambda: self._act_on_selection(self.queue.retry))
-        self.up_button.clicked.connect(lambda: self._act_on_selection(lambda jid: self.queue.reorder(jid, -1)))
-        self.down_button.clicked.connect(lambda: self._act_on_selection(lambda jid: self.queue.reorder(jid, +1)))
+        self.up_button.clicked.connect(
+            lambda: self._act_on_selection(lambda jid: self.queue.reorder(jid, -1))
+        )
+        self.down_button.clicked.connect(
+            lambda: self._act_on_selection(lambda jid: self.queue.reorder(jid, +1))
+        )
         self.clear_button.clicked.connect(self.queue.clear_finished)
 
         self._timer = QTimer(self)
@@ -1099,9 +1117,11 @@ class MixPage(QWidget):
     property_changed = Signal(str, str, object)
     mixdown_requested = Signal(str)
     stems_requested = Signal()
+    track_selected = Signal(str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self._selected_track_id: str | None = None
         outer = QVBoxLayout(self)
         outer.setContentsMargins(28, 24, 28, 24)
         heading = QLabel("Mix")
@@ -1110,6 +1130,7 @@ class MixPage(QWidget):
         hint = QLabel(
             "One strip per timeline track. Volume (dB) and Pan are sliders; "
             "M = mute the track, S = solo (hear only this track). "
+            "Click a strip to edit its FX chain below. "
             "Every change is undoable with Ctrl+Z."
         )
         hint.setObjectName("muted")
@@ -1121,6 +1142,10 @@ class MixPage(QWidget):
         self.strips_layout.setContentsMargins(0, 0, 0, 0)
         self.strips_layout.setSpacing(10)
         outer.addWidget(self.strips_area)
+        outer.addSpacing(10)
+        # FX Rack for selected track
+        self._fx_rack = FxRackWidget()
+        outer.addWidget(self._fx_rack)
         outer.addSpacing(10)
         # project render section
         render_box = QGroupBox("Project render")
@@ -1159,6 +1184,8 @@ class MixPage(QWidget):
 
     def _build_strip(self, track: TrackState) -> QGroupBox:
         box = QGroupBox(track.name)
+        box.setProperty("track_id", track.track_id)
+        box.installEventFilter(self)
         layout = QVBoxLayout(box)
         layout.setSpacing(6)
 
@@ -1218,6 +1245,15 @@ class MixPage(QWidget):
         layout.addWidget(pan)
         layout.addLayout(ms_row)
         return box
+
+    def eventFilter(self, obj, event):  # noqa: N802
+        from PySide6.QtCore import QEvent
+        if event.type() == QEvent.MouseButtonPress:
+            track_id = obj.property("track_id")
+            if track_id:
+                self._selected_track_id = track_id
+                self.track_selected.emit(track_id)
+        return super().eventFilter(obj, event)
 
 
 class ProvenancePage(QWidget):
@@ -1491,6 +1527,12 @@ class MainWindow(QMainWindow):
         import_btn = QPushButton("Import audio…")
         import_btn.clicked.connect(self._on_import_audio)
         toolbar.addWidget(import_btn)
+        import_midi_btn = QPushButton("Import MIDI…")
+        import_midi_btn.clicked.connect(self._on_import_midi)
+        toolbar.addWidget(import_midi_btn)
+        export_midi_btn = QPushButton("Export MIDI…")
+        export_midi_btn.clicked.connect(self._on_export_midi)
+        toolbar.addWidget(export_midi_btn)
         toolbar.addStretch(1)
         hint = QLabel(
             "S = split · D = duplicate · C/V = copy/paste · "
@@ -1527,6 +1569,15 @@ class MainWindow(QMainWindow):
         form.addRow("Fade out", self._clip_fade_out)
         props_lay.addLayout(form)
         timeline_layout.addWidget(self.clip_props_box)
+        # Piano Roll + Drum Grid tabs
+        self._editor_tabs = QTabWidget()
+        self._piano_roll = PianoRollWidget()
+        self._drum_grid = DrumGridWidget()
+        self._editor_tabs.addTab(self._piano_roll, "Piano Roll")
+        self._editor_tabs.addTab(self._drum_grid, "Drum Grid")
+        self._piano_roll.clip_changed.connect(self._on_piano_roll_changed)
+        self._drum_grid.pattern_changed.connect(self._on_drum_grid_changed)
+        timeline_layout.addWidget(self._editor_tabs)
         self.mix_page = MixPage()
         self.provenance_page = ProvenancePage(self.library)
 
@@ -1566,9 +1617,12 @@ class MainWindow(QMainWindow):
         self.sidebar.setCurrentRow(1)
 
         self.generate_page.generate_requested.connect(self._on_generate)
+        self.generate_page.midi_generated.connect(self._on_midi_generated)
         self.mix_page.property_changed.connect(self._on_mix_property)
         self.mix_page.mixdown_requested.connect(self._on_mixdown)
         self.mix_page.stems_requested.connect(self._on_stems)
+        self.mix_page.track_selected.connect(self._on_mix_track_selected)
+        self.mix_page._fx_rack.chain_changed.connect(self._on_fx_chain_changed)
         self.timeline_canvas.clip_moved.connect(self._on_clip_moved)
         self.timeline_canvas.clip_delete_requested.connect(self._on_clip_delete)
         self.timeline_canvas.selection_changed.connect(self._on_clip_selection_changed)
@@ -1814,6 +1868,25 @@ class MainWindow(QMainWindow):
         self._clip_fade_in.setValue(clip.fade_in_sec)
         self._clip_fade_out.setValue(clip.fade_out_sec)
         self._clip_prop_refreshing = False
+        # load into Piano Roll / Drum Grid if MIDI clip
+        if clip.source_kind == "MIDI" and clip.midi_data is not None:
+            from lfms.midi.model import MidiClip as _MC
+            try:
+                midi_clip = _MC.from_dict(clip.midi_data)
+                is_drum = any(
+                    n.channel == 10 for n in midi_clip.notes
+                )
+                if is_drum:
+                    self._drum_grid.bpm = midi_clip.tempo_bpm
+                    self._drum_grid.load_clip(midi_clip)
+                    self._editor_tabs.setCurrentWidget(self._drum_grid)
+                else:
+                    self._piano_roll.set_clip(midi_clip)
+                    self._editor_tabs.setCurrentWidget(self._piano_roll)
+            except Exception:
+                pass
+        elif clip.source_kind == "GENERATED":
+            pass  # no MIDI data to show
 
     def _commit_clip_property(self, field: str, value) -> None:
         if self._clip_prop_refreshing:
@@ -1900,6 +1973,147 @@ class MainWindow(QMainWindow):
         self.refresh_timeline_view()
         self.statusBar().showMessage(
             f"Imported {item.title} ({duration:.1f}s) — library #{item.id}", 8000
+        )
+
+    # -------------------------------------- phase-C/E: MIDI import/export
+
+    def _on_import_midi(self) -> None:
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Import MIDI file", str(Path.home()),
+            "MIDI files (*.mid *.midi);;All files (*)",
+        )
+        if not file_path:
+            return
+        from lfms.midi.io import read_midi
+        try:
+            clips = read_midi(file_path)
+        except Exception as exc:
+            self.statusBar().showMessage(f"MIDI import failed: {exc}", 8000)
+            return
+        if not clips:
+            self.statusBar().showMessage("MIDI file contains no note data", 6000)
+            return
+        track = next(
+            (t for t in self.document.tracks if t.kind == "MUSIC"),
+            self.document.tracks[0] if self.document.tracks else None,
+        )
+        if track is None:
+            track = TrackState(name="MIDI", kind="MUSIC")
+            self.commands.execute(AddTrackCommand(track), self.document)
+        start = max(
+            (c.end_sec for c in self.document.clips_on_track(track.track_id)),
+            default=0.0,
+        )
+        total_notes = 0
+        for midi_clip in clips:
+            clip = Clip(
+                track_id=track.track_id,
+                start_sec=start,
+                duration_sec=midi_clip.duration_sec,
+                label=midi_clip.title,
+                source_kind="MIDI",
+                source_ref=file_path,
+                midi_data=midi_clip.to_dict(),
+            )
+            self.commands.execute(AddClipCommand(clip), self.document)
+            start += midi_clip.duration_sec + 0.5
+            total_notes += len(midi_clip.notes)
+        self.refresh_timeline_view()
+        self.statusBar().showMessage(
+            f"Imported {len(clips)} MIDI track(s), {total_notes} notes", 8000,
+        )
+
+    def _on_export_midi(self) -> None:
+        from lfms.midi.io import write_midi
+        from lfms.midi.model import MidiClip
+        midi_clips = []
+        for clip in self.document.clips:
+            if clip.source_kind == "MIDI" and clip.midi_data is not None:
+                midi_clips.append(MidiClip.from_dict(clip.midi_data))
+        if not midi_clips:
+            self.statusBar().showMessage("No MIDI clips to export", 6000)
+            return
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Export MIDI file", str(Path.home() / "timeline.mid"),
+            "MIDI files (*.mid);;All files (*)",
+        )
+        if not file_path:
+            return
+        try:
+            write_midi(midi_clips, file_path)
+        except Exception as exc:
+            self.statusBar().showMessage(f"MIDI export failed: {exc}", 8000)
+            return
+        self.statusBar().showMessage(
+            f"Exported {len(midi_clips)} MIDI clip(s) → {Path(file_path).name}", 8000,
+        )
+
+    # -------------------------------------- phase-C: piano roll / drum grid
+
+    def _on_piano_roll_changed(self) -> None:
+        clip_id = self.timeline_canvas.selected_clip_id
+        if clip_id is None:
+            return
+        try:
+            clip = self.document.clip(clip_id)
+        except Exception:
+            return
+        pr = self._piano_roll
+        if pr.clip is not None:
+            clip.midi_data = pr.clip.to_dict()
+            clip.source_kind = "MIDI"
+            clip.duration_sec = pr.clip.duration_sec
+            self.refresh_timeline_view()
+
+    def _on_drum_grid_changed(self) -> None:
+        clip_id = self.timeline_canvas.selected_clip_id
+        if clip_id is None:
+            return
+        try:
+            clip = self.document.clip(clip_id)
+        except Exception:
+            return
+        drum_clip = self._drum_grid.to_clip()
+        clip.midi_data = drum_clip.to_dict()
+        clip.source_kind = "MIDI"
+        clip.duration_sec = drum_clip.duration_sec
+        self.refresh_timeline_view()
+
+    # ---------------------------------------- phase-D: FX rack integration
+
+    def _on_mix_track_selected(self, track_id: str) -> None:
+        chain = self.document.fx_chain(track_id)
+        self.mix_page._fx_rack.set_chain(chain)
+
+    def _on_fx_chain_changed(self) -> None:
+        self.refresh_timeline_view()
+
+    def _on_midi_generated(self, midi_clip) -> None:
+        track = next(
+            (t for t in self.document.tracks if t.kind == "MUSIC"),
+            self.document.tracks[0] if self.document.tracks else None,
+        )
+        if track is None:
+            track = TrackState(name="MIDI", kind="MUSIC")
+            self.commands.execute(AddTrackCommand(track), self.document)
+        start = max(
+            (c.end_sec for c in self.document.clips_on_track(track.track_id)),
+            default=0.0,
+        )
+        clip = Clip(
+            track_id=track.track_id,
+            start_sec=start,
+            duration_sec=midi_clip.duration_sec,
+            label=midi_clip.title,
+            source_kind="MIDI",
+            midi_data=midi_clip.to_dict(),
+        )
+        self.commands.execute(AddClipCommand(clip), self.document)
+        self.refresh_timeline_view()
+        self.sidebar.setCurrentRow(3)  # switch to Timeline page
+        self.statusBar().showMessage(
+            f"Chord progression added: {midi_clip.title} "
+            f"({len(midi_clip.notes)} notes)", 8000,
         )
 
     # -------------------------------------------- phase-A: project render

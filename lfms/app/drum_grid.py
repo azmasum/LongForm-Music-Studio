@@ -6,7 +6,7 @@ toggles it on/off.  Right-drag adjusts velocity (vertical drag).
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QBrush, QColor, QPen
+from PySide6.QtGui import QBrush, QColor, QPainter, QPen
 from PySide6.QtWidgets import (
     QGraphicsRectItem,
     QGraphicsScene,
@@ -205,7 +205,7 @@ class DrumGridWidget(QWidget):
 
         self._scene = DrumScene(n_steps, self)
         self._view = QGraphicsView(self._scene)
-        self._view.setRenderHint(QGraphicsView.RenderHint.Antialiasing)
+        self._view.setRenderHint(QPainter.RenderHint.Antialiasing)
         self._view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self._view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._view.setFixedHeight(len(DRUM_MAP) * CELL_H + 40)
