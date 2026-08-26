@@ -28,19 +28,19 @@ from PySide6.QtWidgets import (
     QSlider,
     QSpinBox,
     QStackedWidget,
-    QTabWidget,
     QTableWidget,
     QTableWidgetItem,
+    QTabWidget,
     QTextBrowser,
     QVBoxLayout,
     QWidget,
 )
 
-from lfms.app.theme import ACCENT, BORDER, POSITIVE, TEXT_DIM
-from lfms.app.piano_roll import PianoRollWidget
+from lfms.app.chord_panel import ProgressionWidget
 from lfms.app.drum_grid import DrumGridWidget
 from lfms.app.fx_rack import FxRackWidget
-from lfms.app.chord_panel import ProgressionWidget
+from lfms.app.piano_roll import PianoRollWidget
+from lfms.app.theme import ACCENT, BORDER, POSITIVE, TEXT_DIM
 from lfms.audio_engine.playback import BufferPlayer
 from lfms.core.enums import Genre, Mood
 from lfms.core.errors import AudioDeviceError, ValidationError
