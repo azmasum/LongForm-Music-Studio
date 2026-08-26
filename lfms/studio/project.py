@@ -286,6 +286,20 @@ def build_project_graph(
             None,
         )
         strip.volume_envelope = _volume_envelope_factory(volume_lane, graph.sample_rate)
+        # Build FX chain from document
+        chain = document.fx_chain(track.track_id)
+        for slot in chain.slots:
+            if not slot.enabled:
+                continue
+            from lfms.audio_engine.studio_fx import build_effect_from_dict
+            try:
+                effect = build_effect_from_dict(
+                    {"type": slot.effect_type, **slot.params},
+                    graph.sample_rate,
+                )
+                strip.effects.append(effect)
+            except (ValueError, KeyError):
+                pass  # skip unrecognised effects gracefully
     if not graph.mixer.strips:
         raise ValidationError("selected track has no clips to render")
     graph.mixer.master_volume_db = master_volume_db

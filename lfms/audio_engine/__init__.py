@@ -11,6 +11,13 @@ from lfms.audio_engine.sources import (
     SourceNode,
     ToneSource,
 )
+from lfms.audio_engine.studio_fx import (
+    CompressorEffect,
+    DelayEffect,
+    EqEffect,
+    ReverbEffect,
+    build_effect_from_dict,
+)
 
 __all__ = [
     "RenderContext",
@@ -27,4 +34,9 @@ __all__ = [
     "NoiseSource",
     "AmbienceSource",
     "DroneSource",
+    "CompressorEffect",
+    "DelayEffect",
+    "EqEffect",
+    "ReverbEffect",
+    "build_effect_from_dict",
 ]

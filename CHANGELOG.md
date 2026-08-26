@@ -52,6 +52,21 @@ All notable changes are documented here. Format based on
 - **Clip model**: `fade_in_sec`, `fade_out_sec` fields persisted in the
   project JSON; `split_clip()` and `clone_clip()` helpers on
   `TimelineDocument`.
+- **FX Rack (Phase D studio roadmap)**:
+  - **5 studio effects**: Gain, 3-band EQ (low-shelf/peaking/high-shelf
+    via RBJ biquads), feed-forward Compressor (threshold/ratio/attack/
+    release/makeup), stereo Delay (time/feedback/wet/ping-pong), algorithmic
+    Reverb (Schroeder combs + allpass, room-size/damping/wet).
+  - **FX chain model** — `FxChain` / `EffectSlot` on each track, serialized
+    in the project JSON; `build_effect_from_dict` / `serialize_effect` for
+    round-trip; effects applied in `TrackStrip.process()` between pan and
+    volume.
+  - **FX Rack GUI** (`lfms.app.fx_rack`) — per-track effect chain editor:
+    add/remove effects from a combo, toggle bypass, per-effect parameter
+    spinboxes with type-specific ranges.
+  - All effects are stateful streaming (no clicks on parameter changes);
+    `EqEffect`, `CompressorEffect`, `DelayEffect`, `ReverbEffect` all
+    support `to_dict()` serialization.
 
 ### Changed
 - `TrackStrip` now exposes a `volume_envelope` hook for time-varying

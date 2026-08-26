@@ -80,6 +80,60 @@ class AutomationPoint:
 
 
 @dataclass
+class EffectSlot:
+    """One effect in a track's FX chain, stored as a serialized dict."""
+    effect_id: str = field(default_factory=lambda: new_id("FX"))
+    effect_type: str = "gain"
+    params: dict = field(default_factory=dict)
+    enabled: bool = True
+
+    def to_dict(self) -> dict:
+        return {
+            "effect_id": self.effect_id,
+            "type": self.effect_type,
+            "params": dict(self.params),
+            "enabled": self.enabled,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> EffectSlot:
+        return cls(
+            effect_id=data.get("effect_id", new_id("FX")),
+            effect_type=data.get("type", "gain"),
+            params=dict(data.get("params", {})),
+            enabled=bool(data.get("enabled", True)),
+        )
+
+
+@dataclass
+class FxChain:
+    """Ordered list of effects for a track."""
+    track_id: str
+    slots: list[EffectSlot] = field(default_factory=list)
+
+    def add(self, effect_type: str, params: dict | None = None) -> EffectSlot:
+        slot = EffectSlot(effect_type=effect_type, params=params or {})
+        self.slots.append(slot)
+        return slot
+
+    def remove(self, effect_id: str) -> EffectSlot:
+        for i, s in enumerate(self.slots):
+            if s.effect_id == effect_id:
+                return self.slots.pop(i)
+        raise ValidationError(f"unknown effect {effect_id}")
+
+    def to_dict(self) -> dict:
+        return {"track_id": self.track_id, "slots": [s.to_dict() for s in self.slots]}
+
+    @classmethod
+    def from_dict(cls, data: dict) -> FxChain:
+        chain = cls(track_id=data["track_id"])
+        for s in data.get("slots", []):
+            chain.slots.append(EffectSlot.from_dict(s))
+        return chain
+
+
+@dataclass
 class AutomationLane:
     track_id: str
     parameter: str
@@ -117,6 +171,7 @@ class TimelineDocument:
     clips: list[Clip] = field(default_factory=list)
     lanes: list[AutomationLane] = field(default_factory=list)
     markers: list[Marker] = field(default_factory=list)
+    fx_chains: list[FxChain] = field(default_factory=list)
 
     # -- tracks ---------------------------------------------------------
     def add_track(self, track: TrackState) -> TrackState:
@@ -142,7 +197,18 @@ class TimelineDocument:
         self.lanes = [lane for lane in self.lanes if lane.track_id != track_id]
         for index, remaining in enumerate(self.tracks):
             remaining.order = index
+        # also clean up FX chains
+        self.fx_chains = [c for c in self.fx_chains if c.track_id != track_id]
         return track, removed_clips, removed_lanes
+
+    def fx_chain(self, track_id: str) -> FxChain:
+        """Get or create the FX chain for a track."""
+        for c in self.fx_chains:
+            if c.track_id == track_id:
+                return c
+        chain = FxChain(track_id=track_id)
+        self.fx_chains.append(chain)
+        return chain
 
     # -- clips ----------------------------------------------------------
     def add_clip(self, clip: Clip) -> Clip:
@@ -302,6 +368,7 @@ class TimelineDocument:
                 for lane in self.lanes
             ],
             "markers": [vars(marker) | {} for marker in self.markers],
+            "fx_chains": [chain.to_dict() for chain in self.fx_chains],
         }
 
     @classmethod
@@ -338,4 +405,6 @@ class TimelineDocument:
             document.lanes.append(lane)
         for raw in data.get("markers", []):
             document.add_marker(Marker(**raw))
+        for raw in data.get("fx_chains", []):
+            document.fx_chains.append(FxChain.from_dict(raw))
         return document
