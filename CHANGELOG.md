@@ -3,6 +3,37 @@
 All notable changes are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: semver.
 
+## [Unreleased]
+
+### Added
+- **Timeline editing (Phase A studio roadmap)**:
+  - **Import audio files** into the timeline (WAV/FLAC/OGG/MP3/AIFF) — new
+    "Import audio…" button on the Timeline page toolbar.
+  - **Clip split** (S key at cursor position), **duplicate** (D), **copy/paste**
+    (C / V) — all undoable with Ctrl+Z.
+  - **Per-clip gain** (−24 to +12 dB) and **fade in/out** sliders in the
+    clip properties panel below the canvas.
+  - **Volume automation curves** — piecewise-linear envelope per track,
+    stored in the project document and evaluated during mixdown.
+  - **Project mixdown** — "Render mixdown…" button on the Mix page renders
+    the full timeline (all tracks, clips, automation) into one file, with
+    optional mastering (YOUTUBE / PODCAST / EBU_R128 / RAW).
+  - **Stems export** — "Export stems…" writes one unmastered WAV per track.
+- Streaming **linear resampler** for imported audio files of any sample rate
+  (e.g. 44.1 kHz files on a 48 kHz timeline) — memory-flat, no clicks.
+- **AudioFileSource** — streaming disk reader supporting time-offset, fades
+  and EOF short-block handling (libraries already supported via generated
+  composition recomposition).
+- **Eager clip validation** — missing audio files and unrecoverable library
+  gaps are caught before rendering starts, with clear error messages.
+- **Clip model**: `fade_in_sec`, `fade_out_sec` fields persisted in the
+  project JSON; `split_clip()` and `clone_clip()` helpers on
+  `TimelineDocument`.
+
+### Changed
+- `TrackStrip` now exposes a `volume_envelope` hook for time-varying
+  gain evaluated per render block (backward compatible — defaults to `None`).
+
 ## [1.2.0] — 2026-08-26
 
 ### Added

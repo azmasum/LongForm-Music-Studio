@@ -39,6 +39,9 @@ class TrackState:
             raise ValidationError("track pan must be within [-1, 1]")
 
 
+CLIP_EDITABLE_FIELDS = ("gain_db", "fade_in_sec", "fade_out_sec")
+
+
 @dataclass
 class Clip:
     track_id: str
@@ -49,6 +52,8 @@ class Clip:
     source_kind: str = "GENERATED"
     source_ref: str = ""
     gain_db: float = 0.0
+    fade_in_sec: float = 0.0
+    fade_out_sec: float = 0.0
 
     @property
     def end_sec(self) -> float:
@@ -61,6 +66,10 @@ class Clip:
             raise ValidationError("clip duration must be positive")
         if self.source_kind not in CLIP_SOURCE_KINDS:
             raise ValidationError(f"unknown clip source kind {self.source_kind!r}")
+        if self.fade_in_sec < 0.0 or self.fade_out_sec < 0.0:
+            raise ValidationError("clip fades must be >= 0")
+        if self.fade_in_sec + self.fade_out_sec > self.duration_sec:
+            raise ValidationError("clip fades must not overlap (in + out <= duration)")
 
 
 @dataclass
@@ -169,6 +178,55 @@ class TimelineDocument:
         resized = replace(clip, duration_sec=float(new_duration))
         self.clips[self.clips.index(clip)] = resized
         return resized
+
+    def split_clip(self, clip_id: str, at_sec: float) -> tuple[Clip, Clip]:
+        """Split a clip at an absolute timeline position.
+
+        The left half keeps the original ``clip_id``; the right half gets a
+        fresh id and the original label suffixed with " (2)". Fades are
+        redistributed so audio content is unchanged.
+        """
+        clip = self.clip(clip_id)
+        offset = float(at_sec) - clip.start_sec
+        if offset <= 0.0 or offset >= clip.duration_sec:
+            raise ValidationError(
+                f"split point must be inside the clip "
+                f"({clip.start_sec:.2f}s .. {clip.end_sec:.2f}s)"
+            )
+        fade_in_left = min(clip.fade_in_sec, offset)
+        fade_out_right = min(clip.fade_out_sec, clip.duration_sec - offset)
+        carry_in = max(0.0, clip.fade_in_sec - offset)
+        carry_out = max(0.0, clip.fade_out_sec - (clip.duration_sec - offset))
+        left = replace(
+            clip,
+            duration_sec=offset,
+            fade_in_sec=fade_in_left,
+            fade_out_sec=carry_out,
+        )
+        left.validate()
+        right = replace(
+            clip,
+            clip_id=new_id("CLP"),
+            start_sec=float(at_sec),
+            duration_sec=clip.duration_sec - offset,
+            label=(clip.label + " (2)") if clip.label else "",
+            fade_in_sec=carry_in,
+            fade_out_sec=fade_out_right,
+        )
+        right.validate()
+        index = self.clips.index(clip)
+        self.clips[index : index + 1] = [left, right]
+        return left, right
+
+    def clone_clip(self, clip_id: str, *, new_start: float | None = None) -> Clip:
+        """Return an unattached copy with a fresh id (copy/paste source)."""
+        clip = self.clip(clip_id)
+        return replace(
+            clip,
+            clip_id=new_id("CLP"),
+            start_sec=clip.end_sec if new_start is None else float(new_start),
+            label=(clip.label + " copy") if clip.label else "",
+        )
 
     def clips_in_range(self, start_sec: float, end_sec: float) -> list[Clip]:
         return [

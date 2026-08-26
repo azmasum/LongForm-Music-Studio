@@ -6,7 +6,7 @@ import random
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer, Signal
-from PySide6.QtGui import QAction, QColor, QPainter, QPen
+from PySide6.QtGui import QAction, QColor, QCursor, QPainter, QPen
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -54,6 +54,7 @@ from lfms.provenance import (
     write_certificate,
 )
 from lfms.reference import analyze_file, download_audio, merge_into_payload
+from lfms.studio import render_project_mixdown, render_project_stems
 from lfms.timeline import (
     AddClipCommand,
     AddTrackCommand,
@@ -61,7 +62,9 @@ from lfms.timeline import (
     CommandStack,
     MoveClipCommand,
     RemoveClipCommand,
+    SetClipPropertyCommand,
     SetTrackPropertyCommand,
+    SplitClipCommand,
     TimelineDocument,
     TrackState,
 )
@@ -130,6 +133,11 @@ class TimelineCanvas(QWidget):
 
     clip_moved = Signal(str, float)      # clip_id, new_start_sec
     clip_delete_requested = Signal(str)  # clip_id
+    selection_changed = Signal(object)   # clip_id or None
+    split_requested = Signal(str, float)  # clip_id, at_sec
+    duplicate_requested = Signal(str)    # clip_id
+    copy_requested = Signal(str)         # clip_id
+    paste_requested = Signal(str, float)  # source_clip_id, suggested_start
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -139,6 +147,7 @@ class TimelineCanvas(QWidget):
         self._drag_clip_id: str | None = None
         self._drag_offset_sec = 0.0
         self._drag_preview_start: float | None = None
+        self._copied_clip_id: str | None = None
         self.setMinimumHeight(240)
         self.setFocusPolicy(Qt.StrongFocus)
         self.setMouseTracking(False)
@@ -207,7 +216,10 @@ class TimelineCanvas(QWidget):
         if event.button() != Qt.LeftButton or self.document is None:
             return
         clip_id = self.clip_at(event.position().x(), event.position().y())
+        changed = clip_id != self.selected_clip_id
         self.selected_clip_id = clip_id
+        if changed:
+            self.selection_changed.emit(clip_id)
         if clip_id is not None:
             start_x = self._clip_rects[clip_id][0]
             scale, _, _ = self._geometry()
@@ -244,14 +256,44 @@ class TimelineCanvas(QWidget):
         if abs(preview - clip.start_sec) >= 1.0:  # ignore accidental clicks
             self.clip_moved.emit(clip_id, round(float(preview), 3))
 
+    def _hover_time(self) -> float:
+        """Timeline seconds under the mouse cursor (for S/duplicate split)."""
+        local = self.mapFromGlobal(QCursor.pos())
+        scale, origin, _ = self._geometry()
+        return max(0.0, (local.x() - origin) / scale)
+
     def keyPressEvent(self, event) -> None:  # noqa: N802 (Qt naming)
-        if (
-            self.selected_clip_id is not None
-            and event.key() in (Qt.Key_Delete, Qt.Key_Backspace)
-        ):
-            self.clip_delete_requested.emit(self.selected_clip_id)
+        key = event.key()
+        clip = self.selected_clip()
+        if clip is None or self.document is None:
+            super().keyPressEvent(event)
+            return
+        if key in (Qt.Key_Delete, Qt.Key_Backspace):
+            self.clip_delete_requested.emit(clip.clip_id)
             self.selected_clip_id = None
+            self.selection_changed.emit(None)
             self.update()
+            return
+        if key == Qt.Key_S:  # split at cursor
+            t = self._hover_time()
+            if clip.start_sec < t < clip.end_sec:
+                self.split_requested.emit(clip.clip_id, round(t, 3))
+                self.selected_clip_id = None
+                self.update()
+            return
+        if key == Qt.Key_D:  # duplicate
+            self.duplicate_requested.emit(clip.clip_id)
+            return
+        if key == Qt.Key_C:  # copy
+            self._copied_clip_id = clip.clip_id
+            self.copy_requested.emit(clip.clip_id)
+            return
+        if key == Qt.Key_V and self._copied_clip_id is not None:  # paste
+            try:
+                src = self.document.clip(self._copied_clip_id)
+            except Exception:
+                return
+            self.paste_requested.emit(self._copied_clip_id, src.end_sec + 0.01)
             return
         super().keyPressEvent(event)
 
@@ -1055,6 +1097,8 @@ class MixPage(QWidget):
     """
 
     property_changed = Signal(str, str, object)
+    mixdown_requested = Signal(str)
+    stems_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -1077,6 +1121,24 @@ class MixPage(QWidget):
         self.strips_layout.setContentsMargins(0, 0, 0, 0)
         self.strips_layout.setSpacing(10)
         outer.addWidget(self.strips_area)
+        outer.addSpacing(10)
+        # project render section
+        render_box = QGroupBox("Project render")
+        render_lay = QHBoxLayout(render_box)
+        render_lay.addWidget(QLabel("Mastering preset:"))
+        self._render_preset = QComboBox()
+        self._render_preset.addItems(["RAW (no mastering)", "YOUTUBE", "PODCAST", "EBU_R128"])
+        render_lay.addWidget(self._render_preset)
+        self._render_mixdown_btn = QPushButton("Render mixdown…")
+        render_lay.addWidget(self._render_mixdown_btn)
+        self._render_stems_btn = QPushButton("Export stems…")
+        render_lay.addWidget(self._render_stems_btn)
+        self._render_mixdown_btn.clicked.connect(
+            lambda: self.mixdown_requested.emit(self._render_preset.currentText())
+        )
+        self._render_stems_btn.clicked.connect(self.stems_requested.emit)
+        render_lay.addStretch(1)
+        outer.addWidget(render_box)
         outer.addStretch(1)
         self.set_document(None)
 
@@ -1424,13 +1486,47 @@ class MainWindow(QMainWindow):
         timeline_heading = QLabel("Timeline")
         timeline_heading.setObjectName("page-title")
         timeline_layout.addWidget(timeline_heading)
-        timeline_hint = QLabel(
-            "Click a clip to select it · drag left/right to move · "
-            "press Delete to remove (Ctrl+Z undoes)"
+        # toolbar row: import + shortcuts hint
+        toolbar = QHBoxLayout()
+        import_btn = QPushButton("Import audio…")
+        import_btn.clicked.connect(self._on_import_audio)
+        toolbar.addWidget(import_btn)
+        toolbar.addStretch(1)
+        hint = QLabel(
+            "S = split · D = duplicate · C/V = copy/paste · "
+            "Ctrl+Z undoes · click clip to select"
         )
-        timeline_hint.setObjectName("muted")
-        timeline_layout.addWidget(timeline_hint)
+        hint.setObjectName("muted")
+        toolbar.addWidget(hint)
+        timeline_layout.addLayout(toolbar)
         timeline_layout.addWidget(self.timeline_canvas, stretch=1)
+        # clip properties panel
+        self.clip_props_box = QGroupBox("Selected clip")
+        self.clip_props_box.setEnabled(False)
+        props_lay = QVBoxLayout(self.clip_props_box)
+        props_lay.setSpacing(4)
+        self._clip_label_lbl = QLabel()
+        props_lay.addWidget(self._clip_label_lbl)
+        form = QFormLayout()
+        self._clip_gain_slider = QSlider(Qt.Horizontal)
+        self._clip_gain_slider.setRange(-24, 12)
+        self._clip_gain_label = QLabel("0 dB")
+        form.addRow("Gain", self._clip_gain_label)
+        form.addRow(self._clip_gain_slider)
+        self._clip_fade_in = QDoubleSpinBox()
+        self._clip_fade_in.setRange(0.0, 30.0)
+        self._clip_fade_in.setSuffix(" s")
+        self._clip_fade_in.setSingleStep(0.05)
+        self._clip_fade_in.setDecimals(2)
+        form.addRow("Fade in", self._clip_fade_in)
+        self._clip_fade_out = QDoubleSpinBox()
+        self._clip_fade_out.setRange(0.0, 30.0)
+        self._clip_fade_out.setSuffix(" s")
+        self._clip_fade_out.setSingleStep(0.05)
+        self._clip_fade_out.setDecimals(2)
+        form.addRow("Fade out", self._clip_fade_out)
+        props_lay.addLayout(form)
+        timeline_layout.addWidget(self.clip_props_box)
         self.mix_page = MixPage()
         self.provenance_page = ProvenancePage(self.library)
 
@@ -1471,8 +1567,26 @@ class MainWindow(QMainWindow):
 
         self.generate_page.generate_requested.connect(self._on_generate)
         self.mix_page.property_changed.connect(self._on_mix_property)
+        self.mix_page.mixdown_requested.connect(self._on_mixdown)
+        self.mix_page.stems_requested.connect(self._on_stems)
         self.timeline_canvas.clip_moved.connect(self._on_clip_moved)
         self.timeline_canvas.clip_delete_requested.connect(self._on_clip_delete)
+        self.timeline_canvas.selection_changed.connect(self._on_clip_selection_changed)
+        self.timeline_canvas.split_requested.connect(self._on_clip_split)
+        self.timeline_canvas.duplicate_requested.connect(self._on_clip_duplicate)
+        self.timeline_canvas.paste_requested.connect(self._on_clip_paste)
+        # wire property panel
+        self._clip_gain_slider.sliderReleased.connect(
+            lambda: self._commit_clip_property(
+                "gain_db", float(self._clip_gain_slider.value())
+            )
+        )
+        self._clip_fade_in.valueChanged.connect(
+            lambda v: self._commit_clip_property("fade_in_sec", float(v))
+        )
+        self._clip_fade_out.valueChanged.connect(
+            lambda v: self._commit_clip_property("fade_out_sec", float(v))
+        )
         self._build_actions()
         self.refresh_timeline_view()
 
@@ -1673,6 +1787,181 @@ class MainWindow(QMainWindow):
 
     def _on_clip_delete(self, clip_id: str) -> None:
         self.commands.execute(RemoveClipCommand(clip_id), self.document)
+        if self.timeline_canvas.selected_clip_id is None:
+            self.clip_props_box.setEnabled(False)
+
+    # ---------------------------------------------- phase-A: clip editing
+
+    _clip_prop_refreshing = False
+
+    def _on_clip_selection_changed(self, clip_id) -> None:
+        if clip_id is None:
+            self.clip_props_box.setEnabled(False)
+            return
+        try:
+            clip = self.document.clip(clip_id)
+        except Exception:
+            self.clip_props_box.setEnabled(False)
+            return
+        self._clip_prop_refreshing = True
+        self.clip_props_box.setEnabled(True)
+        self._clip_label_lbl.setText(
+            f"<b>{clip.label or 'Clip'}</b>  ({clip.source_kind})"
+            f"  {clip.start_sec:.2f}s – {clip.end_sec:.2f}s"
+        )
+        self._clip_gain_slider.setValue(int(round(clip.gain_db)))
+        self._clip_gain_label.setText(f"{clip.gain_db:.1f} dB")
+        self._clip_fade_in.setValue(clip.fade_in_sec)
+        self._clip_fade_out.setValue(clip.fade_out_sec)
+        self._clip_prop_refreshing = False
+
+    def _commit_clip_property(self, field: str, value) -> None:
+        if self._clip_prop_refreshing:
+            return
+        clip_id = self.timeline_canvas.selected_clip_id
+        if clip_id is None:
+            return
+        try:
+            command = SetClipPropertyCommand(clip_id, field, value)
+        except ValidationError as exc:
+            self.statusBar().showMessage(str(exc), 6000)
+            return
+        self.commands.execute(command, self.document)
+        self.refresh_timeline_view()
+        if field == "gain_db":
+            self._clip_gain_label.setText(f"{value:.1f} dB")
+        self.statusBar().showMessage(f"{command.name} — Ctrl+Z to undo", 3000)
+
+    def _on_clip_split(self, clip_id: str, at_sec: float) -> None:
+        try:
+            self.commands.execute(SplitClipCommand(clip_id, at_sec), self.document)
+        except ValidationError as exc:
+            self.statusBar().showMessage(str(exc), 6000)
+            return
+        self.refresh_timeline_view()
+        self.statusBar().showMessage(
+            f"Clip split at {format_time(at_sec)} — Ctrl+Z to undo", 4000
+        )
+
+    def _on_clip_duplicate(self, clip_id: str) -> None:
+        try:
+            clip = self.document.clip(clip_id)
+        except Exception:
+            return
+        clone = self.document.clone_clip(clip_id, new_start=clip.end_sec + 0.01)
+        self.commands.execute(AddClipCommand(clone), self.document)
+        self.refresh_timeline_view()
+        self.statusBar().showMessage("Clip duplicated — Ctrl+Z to undo", 3000)
+
+    def _on_clip_paste(self, source_clip_id: str, start: float) -> None:
+        try:
+            clone = self.document.clone_clip(source_clip_id, new_start=start)
+        except ValidationError as exc:
+            self.statusBar().showMessage(str(exc), 6000)
+            return
+        self.commands.execute(AddClipCommand(clone), self.document)
+        self.refresh_timeline_view()
+
+    def _on_import_audio(self) -> None:
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import audio file",
+            str(Path.home()),
+            "Audio files (*.wav *.flac *.ogg *.mp3 *.aiff);;All files (*)",
+        )
+        if not file_path:
+            return
+        try:
+            item = self.library.import_audio_file(file_path)
+        except ValidationError as exc:
+            self.statusBar().showMessage(str(exc), 8000)
+            return
+        duration = item.duration_sec or 60.0
+        track = next(
+            (t for t in self.document.tracks if t.kind == "MUSIC"),
+            self.document.tracks[0] if self.document.tracks else None,
+        )
+        if track is None:
+            track = TrackState(name="Audio", kind="MUSIC")
+            self.commands.execute(AddTrackCommand(track), self.document)
+        start = max(
+            (c.end_sec for c in self.document.clips_on_track(track.track_id)),
+            default=0.0,
+        )
+        clip = Clip(
+            track_id=track.track_id,
+            start_sec=start,
+            duration_sec=duration,
+            label=item.title,
+            source_kind="AUDIO_FILE",
+            source_ref=str(Path(file_path).resolve()),
+        )
+        self.commands.execute(AddClipCommand(clip), self.document)
+        self.refresh_timeline_view()
+        self.statusBar().showMessage(
+            f"Imported {item.title} ({duration:.1f}s) — library #{item.id}", 8000
+        )
+
+    # -------------------------------------------- phase-A: project render
+
+    def _render_preset_name(self, text: str) -> str | None:
+        return None if text.startswith("RAW") else text.split()[0]
+
+    def _on_mixdown(self, preset_text: str) -> None:
+        preset = self._render_preset_name(preset_text)
+        out_dir = QFileDialog.getExistingDirectory(self, "Mixdown output folder")
+        if not out_dir:
+            return
+        status = self.statusBar()
+        btn = self.mix_page._render_mixdown_btn
+        btn.setEnabled(False)
+        try:
+            outcome = render_project_mixdown(
+                self.document,
+                self.library,
+                out_dir,
+                preset=preset,
+                on_progress=lambda f: (
+                    status.showMessage(f"Rendering mixdown… {f * 100:.0f}%")
+                    or QApplication.processEvents()
+                ),
+            )
+            path = outcome.paths[0]
+            name_note = f" [{outcome.master_name}]" if outcome.master_name else ""
+            status.showMessage(
+                f"Mixdown saved: {path.name}{name_note} ({path.parent})", 12000
+            )
+        except ValidationError as exc:
+            status.showMessage(str(exc), 8000)
+        except Exception as exc:
+            status.showMessage(f"Mixdown failed: {exc}", 8000)
+        finally:
+            btn.setEnabled(True)
+
+    def _on_stems(self) -> None:
+        out_dir = QFileDialog.getExistingDirectory(self, "Stems output folder")
+        if not out_dir:
+            return
+        status = self.statusBar()
+        btn = self.mix_page._render_stems_btn
+        btn.setEnabled(False)
+        try:
+            outcome = render_project_stems(
+                self.document,
+                self.library,
+                out_dir,
+                on_progress=lambda f: (
+                    status.showMessage(f"Exporting stems… {f * 100:.0f}%")
+                    or QApplication.processEvents()
+                ),
+            )
+            status.showMessage(
+                f"Exported {len(outcome.paths)} stems → {Path(out_dir)}", 12000
+            )
+        except Exception as exc:
+            status.showMessage(f"Stems export failed: {exc}", 8000)
+        finally:
+            btn.setEnabled(True)
 
     def _on_generate(self, payload: dict) -> None:
         try:

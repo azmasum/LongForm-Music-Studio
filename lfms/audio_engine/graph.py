@@ -28,6 +28,9 @@ class TrackStrip:
         self.effects: list[Effect] = list(effects or [])
         self.mute = False
         self.solo = False
+        # Optional automation: callable(start_frame, n_frames) -> (n,) gain
+        # multipliers in [0, 1] evaluated against the ABSOLUTE timeline.
+        self.volume_envelope = None
 
     @property
     def sample_rate(self) -> int:
@@ -42,6 +45,8 @@ class TrackStrip:
         for effect in self.effects:
             stereo = effect.process(stereo.astype(np.float32)).astype(np.float64)
         stereo *= db_to_gain(self.volume_db)
+        if self.volume_envelope is not None:
+            stereo *= self.volume_envelope(ctx.frames_done, n_frames)[None, :]
         return stereo.astype(np.float32)
 
 

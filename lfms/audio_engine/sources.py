@@ -5,7 +5,10 @@ flows from explicit seeds so identical parameters reproduce identical audio.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
+import soundfile as sf
 from scipy.signal import lfilter
 
 from lfms.audio_engine.dsp import rms
@@ -148,6 +151,141 @@ class AmbienceSource(SourceNode):
             data = self._lp.process(data)
         data *= self.level
         return data.astype(np.float32)[None, :]
+
+
+class _LinearResampler:
+    """Stateful streaming linear-interpolation resampler (mono).
+
+    Vectorized phase accumulator: each call consumes a source chunk and
+    emits ``target_rate/src_rate`` output samples per input sample, carrying
+    the fractional phase across calls so long renders stay seamless.
+    """
+
+    def __init__(self, source_rate: int, target_rate: int) -> None:
+        if source_rate <= 0 or target_rate <= 0:
+            raise ValueError("sample rates must be positive")
+        self.source_rate = int(source_rate)
+        self.target_rate = int(target_rate)
+        self.step = self.source_rate / self.target_rate
+        self._anchor = 0.0   # most recent source sample (position 0)
+        self._t = 1.0        # next output position relative to anchor
+        self._started = False
+
+    def process(self, chunk: np.ndarray) -> np.ndarray:
+        chunk = np.asarray(chunk, dtype=np.float64)
+        if not self._started:
+            if len(chunk) == 0:
+                return np.zeros(0, dtype=np.float32)
+            self._anchor = float(chunk[0])
+            self._t = 1.0
+            self._started = True
+            chunk = chunk[1:]
+        m = len(chunk)
+        if m == 0:
+            return np.zeros(0, dtype=np.float32)
+        if self._t > m:
+            return np.zeros(0, dtype=np.float32)
+        count = int(np.floor((m - self._t) / self.step)) + 1
+        positions = self._t + np.arange(count) * self.step
+        lo = np.floor(positions).astype(np.int64)
+        frac = positions - lo
+        extended = np.concatenate(([self._anchor], chunk))
+        vals_lo = extended[lo]
+        hit_edge = (lo + 1) > m
+        vals_hi = extended[np.minimum(lo + 1, m)]
+        out = vals_lo * (1.0 - frac) + np.where(hit_edge, 0.0, vals_hi) * np.where(
+            hit_edge, 0.0, frac
+        )
+        self._t = float(positions[-1]) + self.step - m
+        self._anchor = float(chunk[-1])
+        return out.astype(np.float32)
+
+
+class AudioFileSource(SourceNode):
+    """Streams any libsndfile-readable file as a mono block source.
+
+    Handles sample-rate conversion via streaming linear interpolation, so a
+    44.1 kHz import can sit on a 48 kHz timeline. Memory stays flat: only
+    one decode block is held at a time.
+    """
+
+    DECODE_BLOCK = 1 << 16
+
+    def __init__(
+        self,
+        sample_rate: int,
+        path: str | Path,
+        *,
+        start_sec: float = 0.0,
+    ) -> None:
+        super().__init__(sample_rate)
+        self.path = Path(path)
+        try:
+            self._handle = sf.SoundFile(str(self.path), mode="r")
+        except sf.LibsndfileError as exc:
+            raise ValueError(f"cannot open audio file {self.path}: {exc}") from exc
+        self.file_rate = int(self._handle.samplerate)
+        self.file_frames = int(self._handle.frames)
+        skip = max(0, int(round(float(start_sec) * self.file_rate)))
+        if skip:
+            self._handle.seek(min(skip, max(0, self.file_frames - 1)))
+        self._resampler = (
+            None
+            if self.file_rate == self.sample_rate
+            else _LinearResampler(self.file_rate, self.sample_rate)
+        )
+        self._pending = np.zeros(0, dtype=np.float64)
+        self._eof = False
+
+    @property
+    def file_duration_sec(self) -> float:
+        """Duration of the whole file in seconds (time is rate-invariant)."""
+        return self.file_frames / self.file_rate
+
+    def close(self) -> None:
+        try:
+            self._handle.close()
+        except Exception:  # pragma: no cover - defensive
+            pass
+
+    def process(self, n_frames: int) -> np.ndarray:
+        """Return up to ``n_frames`` samples; SHORTER block signals EOF."""
+        n = int(n_frames)
+        chunks: list[np.ndarray] = []
+        filled = 0
+        while filled < n and not self._eof:
+            if not len(self._pending):
+                raw, eof = self._read_decode_block()
+                converted = (
+                    self._resampler.process(raw)
+                    if self._resampler is not None
+                    else raw
+                )
+                self._pending = np.asarray(converted, dtype=np.float64)
+                # EOF ends the stream once buffered audio is drained too
+                if eof and len(self._pending) == 0:
+                    self._eof = True
+            take = min(len(self._pending), n - filled)
+            if take <= 0:
+                break
+            chunks.append(self._pending[:take])
+            filled += take
+            self._pending = self._pending[take:]
+        if not chunks:
+            return np.zeros((1, 0), dtype=np.float32)
+        return np.concatenate(chunks)[None, :].astype(np.float32)
+
+    def _read_decode_block(self) -> tuple[np.ndarray, bool]:
+        try:
+            data = self._handle.read(
+                self.DECODE_BLOCK, always_2d=True, dtype="float64"
+            )
+        except (sf.LibsndfileError, RuntimeError):
+            return np.zeros(0, dtype=np.float64), True
+        if len(data) == 0:
+            return np.zeros(0, dtype=np.float64), True
+        mono = data[:, :2].mean(axis=1)
+        return mono.astype(np.float64), len(data) < self.DECODE_BLOCK
 
 
 class DroneSource(SourceNode):

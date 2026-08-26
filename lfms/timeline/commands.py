@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import replace
 
 from lfms.core.errors import ValidationError
 from lfms.timeline.model import (
@@ -119,6 +120,62 @@ class ResizeClipCommand(Command):
         if self.old_duration is None:
             raise ValidationError("command was never executed")
         document.resize_clip(self.clip_id, self.old_duration)
+
+
+class SplitClipCommand(Command):
+    """Splits one clip in two at an absolute position (undo restores it)."""
+
+    def __init__(self, clip_id: str, at_sec: float) -> None:
+        super().__init__(f"Split clip at {at_sec:.2f}s")
+        self.clip_id = clip_id
+        self.at_sec = float(at_sec)
+        self._original: Clip | None = None
+        self._right_id: str | None = None
+        self._left_start: float | None = None
+
+    def do(self, document: TimelineDocument) -> None:
+        self._original = replace(document.clip(self.clip_id))
+        left, right = document.split_clip(self.clip_id, self.at_sec)
+        self._right_id = right.clip_id
+        self._left_start = left.start_sec
+
+    def undo(self, document: TimelineDocument) -> None:
+        if self._original is None or self._right_id is None:
+            raise ValidationError("command was never executed")
+        document.remove_clip(self._right_id)
+        current_left = document.clip(self.clip_id)
+        document.clips[document.clips.index(current_left)] = self._original
+
+
+class SetClipPropertyCommand(Command):
+    """Undoable edit of a clip's gain_db / fade_in_sec / fade_out_sec."""
+
+    _FIELDS = ("gain_db", "fade_in_sec", "fade_out_sec")
+
+    def __init__(self, clip_id: str, field_name: str, new_value: object) -> None:
+        if field_name not in self._FIELDS:
+            raise ValidationError(f"cannot set clip field {field_name!r}")
+        super().__init__(f"Set clip {field_name}")
+        self.clip_id = clip_id
+        self.field_name = field_name
+        self.new_value = new_value
+        self.old_value: object = None
+        self._executed = False
+
+    def do(self, document: TimelineDocument) -> None:
+        clip = document.clip(self.clip_id)
+        self.old_value = getattr(clip, self.field_name)
+        updated = replace(clip, **{self.field_name: float(self.new_value)})
+        updated.validate()
+        document.clips[document.clips.index(clip)] = updated
+        self._executed = True
+
+    def undo(self, document: TimelineDocument) -> None:
+        if not self._executed:
+            raise ValidationError("command was never executed")
+        clip = document.clip(self.clip_id)
+        updated = replace(clip, **{self.field_name: float(self.old_value)})
+        document.clips[document.clips.index(clip)] = updated
 
 
 class SetTrackPropertyCommand(Command):
@@ -307,6 +364,8 @@ __all__ = [
     "RemoveTrackCommand",
     "ResizeClipCommand",
     "SetAutomationPointCommand",
+    "SetClipPropertyCommand",
     "SetTrackPropertyCommand",
+    "SplitClipCommand",
     "documents_equal",
 ]

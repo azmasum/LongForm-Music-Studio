@@ -14,9 +14,12 @@ from lfms.timeline.commands import (
     RemoveTrackCommand,
     ResizeClipCommand,
     SetAutomationPointCommand,
+    SetClipPropertyCommand,
     SetTrackPropertyCommand,
+    SplitClipCommand,
 )
 from lfms.timeline.model import (
+    CLIP_EDITABLE_FIELDS,
     AutomationLane,
     AutomationPoint,
     Clip,
@@ -31,6 +34,7 @@ __all__ = [
     "AddTrackCommand",
     "AutomationLane",
     "AutomationPoint",
+    "CLIP_EDITABLE_FIELDS",
     "Clip",
     "Command",
     "CommandStack",
@@ -42,7 +46,9 @@ __all__ = [
     "RemoveTrackCommand",
     "ResizeClipCommand",
     "SetAutomationPointCommand",
+    "SetClipPropertyCommand",
     "SetTrackPropertyCommand",
+    "SplitClipCommand",
     "TimelineDocument",
     "TrackState",
 ]
