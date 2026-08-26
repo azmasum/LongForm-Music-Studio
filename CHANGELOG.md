@@ -19,6 +19,29 @@ All notable changes are documented here. Format based on
     the full timeline (all tracks, clips, automation) into one file, with
     optional mastering (YOUTUBE / PODCAST / EBU_R128 / RAW).
   - **Stems export** — "Export stems…" writes one unmastered WAV per track.
+- **MIDI / Piano Roll (Phase C studio roadmap)**:
+  - **MIDI model** (`lfms.midi.model`) — `MidiClip` / `MidiNote` dataclasses
+    with pitch-first absolute-second timing, validation, and JSON round-trip.
+  - **MIDI file I/O** (`lfms.midi.io`) — `read_midi` / `write_midi` via
+    `mido`; supports multi-track import with tempo-map conversion and
+    track-index filtering.
+  - **Piano Roll editor** (`lfms.app.piano_roll`) — QGraphicsView with
+    keyboard on the left, beat/bar grid, click-to-add notes, drag to move,
+    Delete to remove, snap-to-grid (1/4, 1/8, 1/16, 1/32), Ctrl+scroll
+    horizontal zoom.
+  - **Drum Step Sequencer** (`lfms.app.drum_grid`) — 16/32-step toggle grid
+    for 10 GM drum instruments; click cells to toggle, converts to/from
+    `MidiClip` on channel 10.
+  - **SamplerSource** — loads any WAV, plays it chromatically at any MIDI
+    pitch via linear-interpolation pitch-shifting; memory-flat streaming.
+  - **DefaultSineSource** — fallback sine-wave instrument when no sample is
+    loaded; used for MIDI clip preview.
+  - **MIDI clips on timeline** — `Clip.source_kind = "MIDI"` with inline
+    `midi_data` dict; renders via `DefaultSineSource` in the project graph;
+    eager validation catches missing data before rendering.
+  - **Timeline model** — `MidiClip` stored inline as `midi_data` dict on
+    `Clip`; `midi_data` persisted in project JSON; `CLIP_SOURCE_KINDS`
+    expanded to include `"MIDI"`.
 - Streaming **linear resampler** for imported audio files of any sample rate
   (e.g. 44.1 kHz files on a 48 kHz timeline) — memory-flat, no clicks.
 - **AudioFileSource** — streaming disk reader supporting time-offset, fades

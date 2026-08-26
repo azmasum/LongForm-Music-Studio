@@ -12,7 +12,7 @@ from lfms.core.errors import ProjectFileError, ValidationError
 from lfms.core.ids import new_id
 
 TRACK_KINDS = ("MUSIC", "AMBIENCE", "VOICEOVER", "REFERENCE")
-CLIP_SOURCE_KINDS = ("GENERATED", "AUDIO_FILE")
+CLIP_SOURCE_KINDS = ("GENERATED", "AUDIO_FILE", "MIDI")
 MARKER_KINDS = ("SECTION", "CUE", "CHAPTER")
 AUTOMATION_PARAMS = ("volume", "pan")
 
@@ -54,6 +54,7 @@ class Clip:
     gain_db: float = 0.0
     fade_in_sec: float = 0.0
     fade_out_sec: float = 0.0
+    midi_data: dict | None = None
 
     @property
     def end_sec(self) -> float:

@@ -202,6 +202,12 @@ def _validate_clip_source(service: LibraryService, clip: Clip) -> None:
             params_from_payload(json.loads(item.params_json))
         except json.JSONDecodeError as exc:
             raise ValidationError("stored parameters are not valid JSON") from exc
+    elif clip.source_kind == "MIDI":
+        if clip.midi_data is None:
+            raise ValidationError(
+                f"MIDI clip {clip.label!r} has no embedded note data",
+                suggestion="re-import the MIDI file or create a new MIDI clip",
+            )
     else:
         raise ValidationError(f"unknown clip source kind {clip.source_kind!r}")
 
@@ -254,6 +260,12 @@ def build_project_graph(
                         f"match project rate {graph.sample_rate}"
                     )
                 return _CompositionClipSource(graph.sample_rate, comp)
+            if clip.source_kind == "MIDI":
+                from lfms.audio_engine.midi_source import DefaultSineSource
+                from lfms.midi.model import MidiClip as _MidiClip
+
+                midi_clip = _MidiClip.from_dict(clip.midi_data)
+                return DefaultSineSource(graph.sample_rate, midi_clip)
             raise ValidationError(f"unknown clip source kind {clip.source_kind!r}")
 
         sequence = ClipSequenceSource(graph.sample_rate, clips, build_child=make_child)
