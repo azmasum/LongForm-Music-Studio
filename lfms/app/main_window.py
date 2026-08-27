@@ -381,89 +381,73 @@ class GeneratePage(QWidget):
         heading = QLabel("Generate music")
         heading.setObjectName("page-title")
         outer.addWidget(heading)
-        outer.addSpacing(12)
+        outer.addSpacing(8)
 
-        card = QFrame()
-        card.setObjectName("card")
-        form = QFormLayout(card)
-        form.setContentsMargins(18, 16, 18, 16)
-        form.setSpacing(12)
-
-        self.seed = QDoubleSpinBox()
-        self.seed.setRange(0, 2_147_483_647)
-        self.seed.setDecimals(0)
-        self.seed.setValue(float(random.randrange(1, 1_000_000)))
-        self.randomize = QPushButton("Random seed")
-        self.auto_seed = QCheckBox("New seed every generate")
-        self.auto_seed.setChecked(True)
-        self.auto_seed.setToolTip(
-            "Unchecked = reuse the seed above and get the identical track again"
+        hint = QLabel(
+            "Describe the music you want — the AI will handle genre, mood, "
+            "tempo and key automatically. Add a reference track to match a "
+            "specific style."
         )
-        seed_row = QHBoxLayout()
-        seed_row.addWidget(self.seed, stretch=1)
-        seed_row.addWidget(self.randomize)
+        hint.setObjectName("muted")
+        hint.setWordWrap(True)
+        outer.addWidget(hint)
+        outer.addSpacing(8)
 
-        self.genre = QComboBox()
-        for genre in Genre:
-            self.genre.addItem(humanize(genre.value), genre.value)
-        self.genre.setCurrentIndex(list(Genre).index(Genre.DOCUMENTARY))
+        # ---- PROMPT (primary input) ----
+        prompt_card = QFrame()
+        prompt_card.setObjectName("card")
+        prompt_lay = QVBoxLayout(prompt_card)
+        prompt_lay.setContentsMargins(18, 16, 18, 16)
+        prompt_lay.setSpacing(8)
+        self.director_prompt = QLineEdit()
+        self.director_prompt.setPlaceholderText(
+            "Describe your music here, e.g. "
+            "\"calm 5 minute documentary background music that slowly builds\""
+        )
+        self.director_prompt.setStyleSheet(
+            "font-size: 14px; padding: 8px 12px;"
+        )
+        prompt_lay.addWidget(self.director_prompt)
+        outer.addWidget(prompt_card)
 
-        self.mood = QComboBox()
-        for mood in Mood:
-            self.mood.addItem(humanize(mood.value), mood.value)
-        self.mood.setCurrentIndex(list(Mood).index(Mood.NEUTRAL))
-
+        # ---- DURATION ----
+        dur_card = QFrame()
+        dur_card.setObjectName("card")
+        dur_lay = QHBoxLayout(dur_card)
+        dur_lay.setContentsMargins(18, 12, 18, 12)
+        dur_lay.setSpacing(8)
+        dur_lay.addWidget(QLabel("Duration:"))
+        self._dur_buttons: list[QPushButton] = []
+        for label, secs in [("1 min", 60), ("3 min", 180), ("5 min", 300),
+                            ("10 min", 600), ("30 min", 1800)]:
+            btn = QPushButton(label)
+            btn.setCheckable(True)
+            btn.setProperty("duration_sec", secs)
+            btn.clicked.connect(lambda _, s=secs: self._set_duration(s))
+            dur_lay.addWidget(btn)
+            self._dur_buttons.append(btn)
+        self._dur_buttons[3].setChecked(True)  # default 10 min
         self.duration = QDoubleSpinBox()
         self.duration.setRange(10.0, 4 * 3600.0)
         self.duration.setDecimals(0)
         self.duration.setSuffix(" s")
         self.duration.setValue(600.0)
         self.duration.setSingleStep(30.0)
+        self.duration.setFixedWidth(80)
+        dur_lay.addWidget(self.duration)
+        dur_lay.addStretch(1)
+        outer.addWidget(dur_card)
 
-        self.intensity = QSlider(Qt.Horizontal)
-        self.intensity.setRange(0, 100)
-        self.intensity.setValue(50)
-        self.intensity_value = QLabel("50")
-        intensity_row = QHBoxLayout()
-        intensity_row.addWidget(self.intensity, stretch=1)
-        intensity_row.addWidget(self.intensity_value)
-
-        seed_outer = QVBoxLayout()
-        seed_outer.addLayout(seed_row)
-        seed_outer.addWidget(self.auto_seed)
-        form.addRow("Seed", seed_outer)
-        form.addRow("Genre", self.genre)
-        form.addRow("Mood", self.mood)
-        form.addRow("Duration", self.duration)
-        form.addRow("Intensity", intensity_row)
-        outer.addWidget(card)
-
-        # --------------------------------------------- output folder (WAV)
-        out_box = QGroupBox("Where to save the audio file")
-        out_layout = QHBoxLayout(out_box)
-        default_out = str(Path.home() / "Downloads")
-        self.output_dir_edit = QLineEdit(default_out)
-        self.output_dir_edit.setToolTip(
-            "Each generation also writes a WAV file here so you can find "
-            "and upload it easily."
-        )
-        self.choose_output_dir = QPushButton("Choose…")
-        self.open_output_dir = QPushButton("Open folder")
-        out_layout.addWidget(self.output_dir_edit, stretch=1)
-        out_layout.addWidget(self.choose_output_dir)
-        out_layout.addWidget(self.open_output_dir)
-        outer.addWidget(out_box)
-
-        # ------------------------------------------- Reference track (style)
+        # ---- REFERENCE TRACK (default on) ----
         ref_box = QGroupBox(
-            "Reference track (optional — generates a SIMILAR style, never a copy)"
+            "Reference track — match the style of an existing song"
         )
         ref_layout = QVBoxLayout(ref_box)
         ref_row = QHBoxLayout()
         self.reference_edit = QLineEdit()
         self.reference_edit.setReadOnly(True)
         self.reference_edit.setPlaceholderText(
-            "Pick an audio file to borrow its tempo, key and mood…"
+            "Pick an audio file to match its tempo, key and mood…"
         )
         self.choose_reference = QPushButton("Choose file…")
         self.reference_url = QPushButton("From URL…")
@@ -475,49 +459,79 @@ class GeneratePage(QWidget):
         ref_row.addWidget(self.clear_reference)
         ref_layout.addLayout(ref_row)
         self.reference_info = QLabel(
-            "The reference is analysed locally; only its tempo/key/energy "
-            "shape guide the composer. Melodies are always original."
+            "Analysed locally — only tempo/key/energy guide the composer. "
+            "Melodies are always original."
         )
         self.reference_info.setObjectName("muted")
         self.reference_info.setWordWrap(True)
         ref_layout.addWidget(self.reference_info)
         outer.addWidget(ref_box)
 
-        # ------------------------------------------------ AI Music Director
-        director_box = QGroupBox("AI Music Director (optional — off by default)")
-        director_layout = QVBoxLayout(director_box)
-        self.director_enabled = QCheckBox(
-            "Enable AI director (I understand where my prompt is sent)"
-        )
-        director_layout.addWidget(self.director_enabled)
-        self.director_consent = QLabel(
-            "Offline interpreter: runs entirely on this machine.\n"
-            "Ollama provider: your prompt text is sent to your own "
-            "Ollama server (localhost by default). Nothing else leaves "
-            "the app."
-        )
-        self.director_consent.setWordWrap(True)
-        self.director_consent.setVisible(False)
-        director_layout.addWidget(self.director_consent)
+        # ---- ADVANCED (collapsible) ----
+        advanced_box = QGroupBox("Advanced settings")
+        advanced_box.setCheckable(True)
+        advanced_box.setChecked(False)
+        adv_layout = QFormLayout(advanced_box)
+        adv_layout.setContentsMargins(18, 16, 18, 16)
+        adv_layout.setSpacing(8)
+        self.genre = QComboBox()
+        for genre in Genre:
+            self.genre.addItem(humanize(genre.value), genre.value)
+        self.genre.setCurrentIndex(list(Genre).index(Genre.DOCUMENTARY))
+        self.mood = QComboBox()
+        for mood in Mood:
+            self.mood.addItem(humanize(mood.value), mood.value)
+        self.mood.setCurrentIndex(list(Mood).index(Mood.NEUTRAL))
+        self.intensity = QSlider(Qt.Horizontal)
+        self.intensity.setRange(0, 100)
+        self.intensity.setValue(50)
+        self.intensity_value = QLabel("50")
+        intensity_row = QHBoxLayout()
+        intensity_row.addWidget(self.intensity, stretch=1)
+        intensity_row.addWidget(self.intensity_value)
+        self.seed = QDoubleSpinBox()
+        self.seed.setRange(0, 2_147_483_647)
+        self.seed.setDecimals(0)
+        self.seed.setValue(float(random.randrange(1, 1_000_000)))
+        self.randomize = QPushButton("Random seed")
+        self.auto_seed = QCheckBox("New seed every generate")
+        self.auto_seed.setChecked(True)
+        seed_row = QHBoxLayout()
+        seed_row.addWidget(self.seed, stretch=1)
+        seed_row.addWidget(self.randomize)
+        seed_outer = QVBoxLayout()
+        seed_outer.addLayout(seed_row)
+        seed_outer.addWidget(self.auto_seed)
         self.director_provider = QComboBox()
         from lfms.director import known_providers
-
         for name in known_providers():
             self.director_provider.addItem(name.capitalize(), name)
-        self.director_prompt = QLineEdit()
-        self.director_prompt.setPlaceholderText(
-            'Describe the music, e.g. "calm 5 minute documentary bed '
-            'under narration, slowly builds"'
-        )
-        self.suggest_button = QPushButton("Suggest parameters")
-        suggest_button_row = QHBoxLayout()
-        suggest_button_row.addWidget(self.director_provider)
-        suggest_button_row.addWidget(self.suggest_button)
-        director_layout.addWidget(self.director_prompt)
-        director_layout.addLayout(suggest_button_row)
-        outer.addWidget(director_box)
+        provider_row = QHBoxLayout()
+        provider_row.addWidget(self.director_provider)
+        provider_row.addStretch(1)
+        adv_layout.addRow("Genre", self.genre)
+        adv_layout.addRow("Mood", self.mood)
+        adv_layout.addRow("Intensity", intensity_row)
+        adv_layout.addRow("Seed", seed_outer)
+        adv_layout.addRow("Director", provider_row)
+        outer.addWidget(advanced_box)
 
-        # Chord Progression section
+        # ---- OUTPUT FOLDER ----
+        out_box = QGroupBox("Output folder")
+        out_layout = QHBoxLayout(out_box)
+        default_out = str(Path.home() / "Downloads")
+        self.output_dir_edit = QLineEdit(default_out)
+        self.output_dir_edit.setToolTip(
+            "WAV files are saved here after each generation."
+        )
+        self.choose_output_dir = QPushButton("Choose…")
+        self.open_output_dir = QPushButton("Open folder")
+        out_layout.addWidget(self.output_dir_edit, stretch=1)
+        out_layout.addWidget(self.choose_output_dir)
+        out_layout.addWidget(self.open_output_dir)
+        outer.addWidget(out_box)
+
+        # ---- CHORD PROGRESSION ----
         chord_box = QGroupBox("Chord Progression (optional — generates a MIDI clip)")
         chord_lay = QVBoxLayout(chord_box)
         self._progression_widget = ProgressionWidget()
@@ -525,11 +539,16 @@ class GeneratePage(QWidget):
         chord_lay.addWidget(self._progression_widget)
         outer.addWidget(chord_box)
 
-        self.generate_button = QPushButton("Generate into timeline")
+        # ---- GENERATE BUTTON ----
+        self.generate_button = QPushButton("Generate music")
         self.generate_button.setObjectName("primary")
+        self.generate_button.setStyleSheet(
+            "font-size: 16px; padding: 12px 32px;"
+        )
         outer.addWidget(self.generate_button, alignment=Qt.AlignLeft)
         outer.addStretch(1)
 
+        # ---- WIRE SIGNALS ----
         self.randomize.clicked.connect(
             lambda: self.seed.setValue(float(random.randrange(1, 1_000_000)))
         )
@@ -542,40 +561,43 @@ class GeneratePage(QWidget):
         self.clear_reference.clicked.connect(self._clear_reference)
 
         from lfms.director import MusicDirector
-
         self.director = MusicDirector()
-        self.director_provider.setEnabled(False)
-        self.director_prompt.setEnabled(False)
-        self.suggest_button.setEnabled(False)
-        self.director_enabled.toggled.connect(self._on_director_toggled)
-        self.suggest_button.clicked.connect(self._on_suggest_clicked)
+        # auto-director: run on prompt change with debounce
+        self._auto_director_timer = QTimer(self)
+        self._auto_director_timer.setSingleShot(True)
+        self._auto_director_timer.setInterval(600)
+        self._auto_director_timer.timeout.connect(self._auto_direct)
+        self.director_prompt.textChanged.connect(
+            lambda: self._auto_director_timer.start()
+        )
+
+    # ------------------------------------------------------- duration
+
+    def _set_duration(self, secs: float) -> None:
+        self.duration.setValue(float(secs))
+        for btn in self._dur_buttons:
+            if btn.property("duration_sec") == secs:
+                btn.setChecked(True)
+            else:
+                btn.setChecked(False)
 
     # ------------------------------------------------------- AI director
 
-    def _on_director_toggled(self, checked: bool) -> None:
-        if checked:
-            self.director.enable(True)
-        else:
-            self.director.disable()
-        self.director_consent.setVisible(checked)
-        for widget in (
-            self.director_provider,
-            self.director_prompt,
-            self.suggest_button,
-        ):
-            widget.setEnabled(checked)
-
-    def _on_suggest_clicked(self) -> None:
-        status = self.window().statusBar()
+    def _auto_direct(self) -> None:
+        prompt = self.director_prompt.text().strip()
+        if len(prompt) < 3:
+            return
+        provider = self.director_provider.currentData()
+        if provider is None:
+            provider = "offline"
         try:
-            self.director.use(self.director_provider.currentData())
-            suggestion = self.director.direct(self.director_prompt.text())
-        except ValidationError as exc:
-            status.showMessage(f"AI director: {exc}", 6000)
+            self.director.enable(True)
+            self.director.use(provider)
+            suggestion = self.director.direct(prompt)
+        except Exception:
             return
         params = suggestion.params
         self.seed.setValue(float(params.seed))
-        # a suggested seed is explicit intent: pin it (disable auto-roll)
         self.auto_seed.setChecked(False)
         genre_index = self.genre.findData(params.genre)
         if genre_index >= 0:
@@ -585,11 +607,13 @@ class GeneratePage(QWidget):
         if mood_index >= 0:
             self.mood.setCurrentIndex(mood_index)
         self.duration.setValue(float(params.duration_sec))
+        self._set_duration(float(params.duration_sec))
         self.intensity.setValue(int(round(params.intensity)))
-        message = f"Applied ({suggestion.provider}): {suggestion.rationale}"
-        if suggestion.warnings:
-            message += " | " + "; ".join(suggestion.warnings)
-        status.showMessage(message[:180], 12000)
+        self.window().statusBar().showMessage(
+            f"AI suggested: {humanize(params.genre)}, "
+            f"{params.duration_sec:.0f}s, intensity {params.intensity:.0f}",
+            5000,
+        )
 
     def current_parameters(self) -> dict:
         if self.auto_seed.isChecked():
@@ -601,6 +625,7 @@ class GeneratePage(QWidget):
             "moods": (self.mood.currentData(),),
             "duration_sec": float(self.duration.value()),
             "intensity": float(self.intensity.value()),
+            "prompt": self.director_prompt.text().strip(),
         }
 
     def _emit_request(self) -> None:
@@ -1732,14 +1757,8 @@ class MainWindow(QMainWindow):
 
     def generate_from_payload(self, payload: dict) -> Clip | None:
         try:
-            params = GenerationParameters(
-                seed=payload["seed"],
-                duration_sec=payload["duration_sec"],
-                genre=payload["genre"],
-                moods=payload["moods"],
-                intensity=payload["intensity"],
-            )
-            params.validate()
+            from lfms.generator.plan import params_from_payload
+            params = params_from_payload(payload)
             composition = Composer(params).compose()
         except ValidationError as exc:
             self.statusBar().showMessage(f"Invalid parameters: {exc}", 8000)
