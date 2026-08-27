@@ -248,28 +248,28 @@ def test_piano_roll_scene_load_clip():
 
 @pytest.mark.skipif(not _GUI_SMOKE, reason="set LFMS_GUI_SMOKE=1 to run GUI tests")
 def test_piano_roll_scene_add_note():
-    from lfms.app.piano_roll import PianoRollScene
+    from lfms.app.piano_roll import PianoRollWidget
     from lfms.midi.model import MidiClip
     clip = MidiClip(duration_sec=8.0)
-    scene = PianoRollScene()
-    scene.load_clip(clip)
-    scene.note_added.emit(1.0, 72, 0.25)
+    widget = PianoRollWidget()
+    widget.set_clip(clip)
+    widget._scene.note_added.emit(1.0, 72, 0.25)
     assert len(clip.notes) == 1
     assert clip.notes[0].pitch == 72
 
 
 @pytest.mark.skipif(not _GUI_SMOKE, reason="set LFMS_GUI_SMOKE=1 to run GUI tests")
 def test_piano_roll_scene_remove_note():
-    from lfms.app.piano_roll import PianoRollScene
+    from lfms.app.piano_roll import PianoRollWidget
     from lfms.midi.model import MidiClip, MidiNote
     clip = MidiClip(
         duration_sec=4.0,
         notes=[MidiNote(pitch=60, start_sec=0.0, duration_sec=0.5)],
     )
-    scene = PianoRollScene()
-    scene.load_clip(clip)
+    widget = PianoRollWidget()
+    widget.set_clip(clip)
     note_id = clip.notes[0].note_id
-    scene.note_removed.emit(note_id)
+    widget._scene.note_removed.emit(note_id)
     assert len(clip.notes) == 0
 
 
@@ -314,7 +314,7 @@ def test_drum_scene_load_clip():
     scene = DrumScene(16)
     scene.load_clip(clip, bpm=120.0)
     assert scene._cells[0][0].is_on  # kick at step 0
-    assert scene._cells[1][2].is_on  # snare at step 2 (0.5s at 120bpm = step 2)
+    assert scene._cells[1][4].is_on  # snare at step 4 (0.5s at 120bpm = 4 × 16th notes)
 
 
 # ── Integration: build_project_graph with MIDI clip ────────────────────────

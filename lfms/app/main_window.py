@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMainWindow,
     QPushButton,
+    QScrollArea,
     QSlider,
     QSpinBox,
     QStackedWidget,
@@ -546,7 +547,6 @@ class GeneratePage(QWidget):
             "font-size: 16px; padding: 12px 32px;"
         )
         outer.addWidget(self.generate_button, alignment=Qt.AlignLeft)
-        outer.addStretch(1)
 
         # ---- WIRE SIGNALS ----
         self.randomize.clicked.connect(
@@ -1607,12 +1607,12 @@ class MainWindow(QMainWindow):
         self.provenance_page = ProvenancePage(self.library)
 
         self.pages = QStackedWidget()
-        self.pages.addWidget(self.library_page)
-        self.pages.addWidget(self.generate_page)
-        self.pages.addWidget(self.batch_page)
-        self.pages.addWidget(timeline_page)
-        self.pages.addWidget(self.mix_page)
-        self.pages.addWidget(self.provenance_page)
+        self.pages.addWidget(self._wrap_scroll(self.library_page))
+        self.pages.addWidget(self._wrap_scroll(self.generate_page, center=True))
+        self.pages.addWidget(self._wrap_scroll(self.batch_page, center=True))
+        self.pages.addWidget(self._wrap_scroll(timeline_page))
+        self.pages.addWidget(self._wrap_scroll(self.mix_page))
+        self.pages.addWidget(self._wrap_scroll(self.provenance_page))
 
         body = QWidget()
         body_layout = QHBoxLayout(body)
@@ -1679,6 +1679,23 @@ class MainWindow(QMainWindow):
         self.redo_action.triggered.connect(self._redo)
         menu.addAction(self.undo_action)
         menu.addAction(self.redo_action)
+
+    @staticmethod
+    def _wrap_scroll(page: QWidget, *, center: bool = False) -> QWidget:
+        """Wrap *page* in a QScrollArea so clipped content is scrollable.
+
+        When *center* is True the inner content is capped at 860 px width
+        and centred horizontally so form pages don't stretch absurdly wide
+        on 4K / ultrawide monitors.
+        """
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setWidget(page)
+        if center:
+            page.setMaximumWidth(860)
+        return scroll
 
     def _ensure_music_track(self) -> None:
         if not any(track.kind == "MUSIC" for track in self.document.tracks):
