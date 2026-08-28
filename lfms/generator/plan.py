@@ -149,6 +149,7 @@ class GenerationParameters:
     energy_points: tuple[tuple[float, float], ...] | None = None
     drums: bool = False
     drum_energy: float = 50.0
+    drum_style: str = ""
 
     def validate(self) -> None:
         if self.genre not in _GENRE_PROFILES:
@@ -209,7 +210,7 @@ class MusicPlan:
     pad_instrument: str = "PAD"
     bass_instrument: str = "BASS"
     perc_snare: bool = False
-    drums: str = "NONE"  # NONE | LIGHT | FULL | TRIBAL
+    drums: str = "NONE"  # NONE | LIGHT | FULL | TRIBAL | FOUR_FLOOR
     sample_rate: int = DEFAULT_SAMPLE_RATE
     voiceover_safe: bool = False
     fingerprint: str = field(default="")
@@ -280,8 +281,16 @@ def build_plan(params: GenerationParameters) -> MusicPlan:
     # driving kit rather than leaving it to the quiet genre pulse level.
     # Otherwise gentle genres keep their subtle pulse-only texture.
     drum_energy = float(params.drum_energy) if params.drum_energy is not None else params.intensity
+    drum_style = (getattr(params, "drum_style", "") or "").upper()
     if params.drums:
-        drum_mode = "TRIBAL" if drum_energy >= 75 else ("FULL" if drum_energy >= 45 else "LIGHT")
+        if drum_style == "FOUR_FLOOR":
+            drum_mode = "FOUR_FLOOR"
+        elif drum_energy >= 75:
+            drum_mode = "TRIBAL"
+        elif drum_energy >= 45:
+            drum_mode = "FULL"
+        else:
+            drum_mode = "LIGHT"
         # explicit drums always punch through the quiet-genre pulse limit
         pw = pulse if pulse > 0.20 else 0.05 + 0.35 * drum_energy / 100.0
         pulse = max(pulse, pw)

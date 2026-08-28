@@ -105,6 +105,42 @@ def test_gentle_lofi_beat_gets_light_percussion():
     assert payload.get("drums") is True
 
 
+def test_festival_edm_prompt_is_electronic_with_four_on_floor():
+    payload, _ = interpret_prompt(
+        "High-energy EDM, tech house, 126 BPM. Driving four-on-the-floor "
+        "acoustic drum kit mixed with crisp electronic hi-hats, staccato "
+        "piano chords, glitchy synth cuts. Bright, uplifting, danceable "
+        "festival vibe."
+    )
+    assert payload["genre"] == "ELECTRONIC"
+    assert payload["bpm"] == 126
+    assert payload["drums"] is True
+    assert payload["drum_style"] == "FOUR_FLOOR"
+
+
+def test_four_on_floor_plan_renders_every_beat_kick():
+    from lfms.generator.plan import build_plan
+
+    payload = {
+        "seed": 3,
+        "genre": "ELECTRONIC",
+        "moods": ("ENERGETIC",),
+        "duration_sec": 24.0,
+        "bpm": 126,
+        "drums": True,
+        "drum_energy": 75.0,
+        "drum_style": "FOUR_FLOOR",
+    }
+    plan = build_plan(params_from_payload(payload))
+    assert plan.drums == "FOUR_FLOOR"
+    comp = Composer(params_from_payload(payload)).compose()
+    events = comp.events()
+    kicks = [e for e in events if e.instrument == "KICK"]
+    assert len(kicks) >= 30  # 24s at 126bpm, four-on-the-floor >= ~32 beats
+    assert any(e.instrument == "SNARE" for e in events)
+    assert any(e.instrument == "HAT" for e in events)
+
+
 def test_interpreter_is_deterministic():
     prompt = "hopeful corporate technology demo, 2 minutes"
     first, first_notes = interpret_prompt(prompt)

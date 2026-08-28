@@ -10,6 +10,14 @@ _DEFAULT_DURATION = 600.0
 _MAX_DURATION = 7200.0
 
 _GENRE_PATTERNS: tuple[tuple[str, str], ...] = (
+    # Strongly genre-defining EDM / dance words first so a "tech house
+    # festival four-on-the-floor" prompt is clearly ELECTRONIC even when
+    # it also contains mood words like "uplifting" or "emotional".
+    ("edm", "ELECTRONIC"), ("tech house", "ELECTRONIC"),
+    ("house music", "ELECTRONIC"), ("four-on-the-floor", "ELECTRONIC"),
+    ("rave", "ELECTRONIC"), ("dubstep", "ELECTRONIC"),
+    ("trap beat", "ELECTRONIC"), ("dj set", "ELECTRONIC"),
+    ("techno", "ELECTRONIC"), ("trance", "ELECTRONIC"),
     ("lo-fi", "LOFI"), ("lofi", "LOFI"),
     ("chillhop", "CHILL"), ("chill", "CHILL"),
     ("meditation", "MEDITATION"), ("meditative", "MEDITATION"),
@@ -40,6 +48,10 @@ _GENRE_PATTERNS: tuple[tuple[str, str], ...] = (
     ("piano", "PIANO"),
     ("electronic", "ELECTRONIC"), ("synthwave", "ELECTRONIC"),
     ("synth", "ELECTRONIC"), ("edm", "ELECTRONIC"),
+    ("tech house", "ELECTRONIC"), ("house music", "ELECTRONIC"),
+    ("four-on-the-floor", "ELECTRONIC"), ("festival", "ELECTRONIC"),
+    ("club", "ELECTRONIC"), ("dance", "ELECTRONIC"),
+    ("rave", "ELECTRONIC"), ("dj", "ELECTRONIC"),
     ("minimal", "MINIMAL"),
     ("nature", "NATURE"), ("forest", "NATURE"), ("rain", "NATURE"),
     ("ocean", "NATURE"), ("wildlife", "NATURE"),
@@ -217,7 +229,12 @@ def interpret_prompt(prompt: str) -> tuple[dict, list[str]]:
     # Drums / percussion are a first-class request: "epic tribal drums",
     # "booming drop" must yield an actual driving kit, not the genre's
     # default quiet pulse-only texture.
-    if any(word in text for word in _DRUM_WORDS_TRIBAL):
+    if "four-on-the-floor" in text:
+        payload["drums"] = True
+        payload["drum_energy"] = 75.0
+        payload["drum_style"] = "FOUR_FLOOR"
+        notes.append("four-on-the-floor kit")
+    elif any(word in text for word in _DRUM_WORDS_TRIBAL):
         payload["drums"] = True
         payload["drum_energy"] = 85.0
         notes.append("tribal drums (high-energy kit)")

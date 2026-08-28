@@ -107,6 +107,8 @@ def coerce_payload(payload: dict, prompt: str) -> tuple[dict, list[str]]:
         clean["drum_energy"] = _clamp(float(clean.get("drum_energy", 50.0)), 0.0, 100.0)
     except (TypeError, ValueError):
         clean["drum_energy"] = 50.0
+    if "drum_style" in clean:
+        clean["drum_style"] = str(clean["drum_style"]).upper()
     return clean, warnings
 
 

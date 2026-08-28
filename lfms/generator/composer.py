@@ -171,9 +171,9 @@ class PulseGenerator:
         while time < limit - 1e-9:
             drum_mode = getattr(self.plan, "drums", "NONE")
             kick_times = [time]
-            if drum_mode == "TRIBAL":
+            if drum_mode in ("TRIBAL", "FOUR_FLOOR"):
                 # four-on-the-floor: a kick on every beat for a massive,
-                # driving festival drop
+                # driving festival / club drop
                 kick_times = [time, time + beat, time + 2 * beat, time + 3 * beat]
             elif level > 0.40 and time + 2 * beat < limit:
                 kick_times.append(time + 2 * beat)
@@ -220,7 +220,7 @@ class PulseGenerator:
             # Explicitly requested drums produce a full, driving kit. This
             # is what answers prompts like "epic tribal drums" / "drop":
             # hard backbeat snare on 2 & 4 and a crash accent where asked.
-            if drum_mode in ("FULL", "TRIBAL"):
+            if drum_mode in ("FULL", "TRIBAL", "FOUR_FLOOR"):
                 # heavy backbeats (2 & 4) at high velocity
                 for backbeat in (time + beat, time + 3 * beat):
                     if backbeat < limit - 1e-9:
