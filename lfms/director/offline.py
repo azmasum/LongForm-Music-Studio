@@ -88,6 +88,26 @@ _ENERGY_WORDS: tuple[tuple[str, str], ...] = (
     ("steady", "FLAT"), ("constant", "FLAT"), ("even level", "FLAT"),
 )
 
+# Drum / percussion intent words. When any hit, we ask generation for a
+# driving kit (kick + snare + hats, or a tribal pattern at high energy).
+_DRUM_WORDS_LIGHT: tuple[str, ...] = (
+    "soft beat", "light beat", "simple beat", "gentle beat",
+    "soft drums", "light percussion", "shaker",
+)
+_DRUM_WORDS_FULL: tuple[str, ...] = (
+    "drums", "drum", "beat", "percussion", "groove", "groovy",
+    "kicks", "kick drum", "kick", "hi-hat", "hihat", "hats",
+    "beat drop", "drop", "breakbeat", "backbeat",
+)
+_DRUM_WORDS_TRIBAL: tuple[str, ...] = (
+    "tribal drums", "tribal", "drum circle", "war drums", "taiko",
+    "big drums", "booming drums", "epic drums", "heavy drums",
+)
+_DROP_WORDS: tuple[str, ...] = (
+    "booming drop", "drop", "explosive drop", "build and drop",
+    "epic drop",
+)
+
 _VOICEOVER_WORDS = (
     "voiceover", "voice-over", "voice over", "narration", "narrator",
     "spoken word", "under speech",
@@ -193,6 +213,27 @@ def interpret_prompt(prompt: str) -> tuple[dict, list[str]]:
     if any(word in text for word in _VOICEOVER_WORDS):
         payload["voiceover_safe"] = True
         notes.append("voiceover-safe")
+
+    # Drums / percussion are a first-class request: "epic tribal drums",
+    # "booming drop" must yield an actual driving kit, not the genre's
+    # default quiet pulse-only texture.
+    if any(word in text for word in _DRUM_WORDS_TRIBAL):
+        payload["drums"] = True
+        payload["drum_energy"] = 85.0
+        notes.append("tribal drums (high-energy kit)")
+    elif any(word in text for word in _DROP_WORDS):
+        payload["drums"] = True
+        payload["drum_energy"] = 75.0
+        notes.append("drums with drop (full kit)")
+    elif any(word in text for word in _DRUM_WORDS_FULL):
+        # drop words double as full-kit intent for a driving, anthem feel
+        payload["drums"] = True
+        payload["drum_energy"] = 65.0
+        notes.append("drums (full kit)")
+    elif any(word in text for word in _DRUM_WORDS_LIGHT):
+        payload["drums"] = True
+        payload["drum_energy"] = 32.0
+        notes.append("light percussion")
 
     for word, curve in _ENERGY_WORDS:
         if word in text:

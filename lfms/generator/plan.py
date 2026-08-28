@@ -147,6 +147,8 @@ class GenerationParameters:
     voiceover_safe: bool = False
     energy_curve: str | None = None
     energy_points: tuple[tuple[float, float], ...] | None = None
+    drums: bool = False
+    drum_energy: float = 50.0
 
     def validate(self) -> None:
         if self.genre not in _GENRE_PROFILES:
@@ -170,6 +172,8 @@ class GenerationParameters:
             raise ValidationError(f"invalid key_mode {self.key_mode!r}")
         if int(self.sample_rate) not in (22050, 32000, 44100, 48000, 88200, 96000):
             raise ValidationError(f"unsupported sample_rate {self.sample_rate}")
+        if not 0.0 <= float(self.drum_energy) <= 100.0:
+            raise ValidationError("drum_energy must be within [0, 100]")
         if self.energy_curve is not None:
             from lfms.arranger.energy import known_energy_presets
 
@@ -205,6 +209,7 @@ class MusicPlan:
     pad_instrument: str = "PAD"
     bass_instrument: str = "BASS"
     perc_snare: bool = False
+    drums: str = "NONE"  # NONE | LIGHT | FULL | TRIBAL
     sample_rate: int = DEFAULT_SAMPLE_RATE
     voiceover_safe: bool = False
     fingerprint: str = field(default="")
@@ -270,6 +275,25 @@ def build_plan(params: GenerationParameters) -> MusicPlan:
     bass_inst = str(family["bass"][int(inst_rng.integers(0, len(family["bass"])))])
     snare = bool(pulse > 0.30 and inst_rng.random() < min(1.0, pulse))
 
+    # Percussion is a first-class request: the director may explicitly
+    # ask for "drums / tribal / drop / beat", in which case we guarantee a
+    # driving kit rather than leaving it to the quiet genre pulse level.
+    # Otherwise gentle genres keep their subtle pulse-only texture.
+    drum_energy = float(params.drum_energy) if params.drum_energy is not None else params.intensity
+    if params.drums:
+        drum_mode = "TRIBAL" if drum_energy >= 75 else ("FULL" if drum_energy >= 45 else "LIGHT")
+        # explicit drums always punch through the quiet-genre pulse limit
+        pw = pulse if pulse > 0.20 else 0.05 + 0.35 * drum_energy / 100.0
+        pulse = max(pulse, pw)
+        snare = True
+    elif pulse > 0.30:
+        # energy-driven pulse may still yield a snare backbeat naturally
+        snare = bool(snare and drum_energy >= 25)
+        drum_mode = "LIGHT" if snare else "NONE"
+    else:
+        snare = False
+        drum_mode = "NONE"
+
     plan_fingerprint = fingerprint(
         [
             "PLAN",
@@ -302,6 +326,7 @@ def build_plan(params: GenerationParameters) -> MusicPlan:
         pad_instrument=pad_inst,
         bass_instrument=bass_inst,
         perc_snare=snare,
+        drums=drum_mode,
         sample_rate=int(params.sample_rate),
         voiceover_safe=bool(params.voiceover_safe),
         fingerprint=plan_fingerprint,

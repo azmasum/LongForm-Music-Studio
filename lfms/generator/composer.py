@@ -169,8 +169,13 @@ class PulseGenerator:
         first_bar = int(np.floor(start_sec / bar_sec + 1e-9))
         time = first_bar * bar_sec
         while time < limit - 1e-9:
+            drum_mode = getattr(self.plan, "drums", "NONE")
             kick_times = [time]
-            if level > 0.40 and time + 2 * beat < limit:
+            if drum_mode == "TRIBAL":
+                # four-on-the-floor: a kick on every beat for a massive,
+                # driving festival drop
+                kick_times = [time, time + beat, time + 2 * beat, time + 3 * beat]
+            elif level > 0.40 and time + 2 * beat < limit:
                 kick_times.append(time + 2 * beat)
             for kick_start in kick_times:
                 events.append(
@@ -208,6 +213,38 @@ class PulseGenerator:
                                 duration_sec=0.22,
                                 midi=38,
                                 velocity=float(np.clip(26.0 + 30.0 * level, 12.0, 80.0)),
+                                role="PULSE",
+                                instrument="SNARE",
+                            )
+                        )
+            # Explicitly requested drums produce a full, driving kit. This
+            # is what answers prompts like "epic tribal drums" / "drop":
+            # hard backbeat snare on 2 & 4 and a crash accent where asked.
+            if drum_mode in ("FULL", "TRIBAL"):
+                # heavy backbeats (2 & 4) at high velocity
+                for backbeat in (time + beat, time + 3 * beat):
+                    if backbeat < limit - 1e-9:
+                        events.append(
+                            NoteEvent(
+                                start_sec=max(0.0, backbeat + float(self._rng.uniform(-jitter, jitter))),
+                                duration_sec=0.22,
+                                midi=38,
+                                velocity=float(np.clip(50.0 + 30.0 * min(1.0, level), 40.0, 92.0)),
+                                role="PULSE",
+                                instrument="SNARE",
+                            )
+                        )
+            if drum_mode == "TRIBAL" and level >= 0.05:
+                # extra ghost snare + open stomp on the offbeats for a
+                # bigger, tribal step
+                for t in (time + 2 * beat,):
+                    if t < limit - 1e-9:
+                        events.append(
+                            NoteEvent(
+                                start_sec=max(0.0, t + float(self._rng.uniform(-jitter, jitter))),
+                                duration_sec=0.3,
+                                midi=38,
+                                velocity=float(np.clip(20.0 + 24.0 * level, 16.0, 70.0)),
                                 role="PULSE",
                                 instrument="SNARE",
                             )

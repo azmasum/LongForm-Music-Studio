@@ -100,6 +100,13 @@ def coerce_payload(payload: dict, prompt: str) -> tuple[dict, list[str]]:
 
     if "voiceover_safe" in clean:
         clean["voiceover_safe"] = bool(clean["voiceover_safe"])
+
+    if "drums" in clean:
+        clean["drums"] = bool(clean["drums"])
+    try:
+        clean["drum_energy"] = _clamp(float(clean.get("drum_energy", 50.0)), 0.0, 100.0)
+    except (TypeError, ValueError):
+        clean["drum_energy"] = 50.0
     return clean, warnings
 
 

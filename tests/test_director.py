@@ -67,6 +67,44 @@ def test_energy_curve_detection():
     assert payload["energy_curve"] == "SLOW_BUILD"
 
 
+def test_tribal_drum_prompt_requests_driving_kit():
+    payload, notes = interpret_prompt(
+        "epic tribal drums, massive sub-bass, booming drop"
+    )
+    assert payload["drums"] is True
+    assert payload["drum_energy"] >= 75.0
+
+
+def test_explicit_drums_reach_plan_and_render_a_full_kit():
+    from lfms.generator.plan import build_plan
+
+    payload = {
+        "seed": 7,
+        "genre": "CINEMATIC",
+        "moods": ("EPIC",),
+        "duration_sec": 30.0,
+        "intensity": 86.0,
+        "drums": True,
+        "drum_energy": 85.0,
+    }
+    plan = build_plan(params_from_payload(payload))
+    assert plan.perc_snare is True
+    assert plan.drums in ("FULL", "TRIBAL")
+    comp = Composer(params_from_payload(payload)).compose()
+    kit = {
+        e.instrument
+        for e in comp.events()
+        if e.instrument in ("KICK", "SNARE", "HAT")
+    }
+    assert kit == {"KICK", "SNARE", "HAT"}
+
+
+def test_gentle_lofi_beat_gets_light_percussion():
+    payload, _ = interpret_prompt("lofi chill beat for studying, 3 minutes")
+    # "beat" is a full-kit trigger but lofi stays light in feel
+    assert payload.get("drums") is True
+
+
 def test_interpreter_is_deterministic():
     prompt = "hopeful corporate technology demo, 2 minutes"
     first, first_notes = interpret_prompt(prompt)
