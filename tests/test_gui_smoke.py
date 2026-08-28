@@ -121,6 +121,20 @@ def test_generate_page_ai_director_flow(qapp, tmp_path):
     assert params["duration_sec"] == 300.0
     assert params["intensity"] <= 40.0
     assert params["seed"] > 0
+    # voiceover-safe is extracted from "narration" and must pass through
+    assert params["voiceover_safe"] is True
+
+    # full arrangement params (bpm/key/energy) reach the payload too
+    page.director_prompt.setText(
+        "cinematic tension at 100 bpm in E minor that slowly builds"
+    )
+    page._auto_direct()
+    full = page.current_parameters()
+    assert full["genre"] == "CINEMATIC"
+    assert full["bpm"] == 100
+    assert full["key_root"] == "E"
+    assert full["key_mode"] == "MINOR"
+    assert full["energy_curve"] == "SLOW_BUILD"
 
     # deterministic: same prompt -> same suggestion
     (tmp_path / "second").mkdir()
@@ -128,7 +142,7 @@ def test_generate_page_ai_director_flow(qapp, tmp_path):
     page2 = window2.generate_page
     page2.director_prompt.setText(page.director_prompt.text())
     page2._auto_direct()
-    assert page2.current_parameters()["seed"] == params["seed"]
+    assert page2.current_parameters()["seed"] == full["seed"]
     window2.library.close()
 
     window.library.close()

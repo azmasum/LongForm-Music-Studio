@@ -562,6 +562,7 @@ class GeneratePage(QWidget):
 
         from lfms.director import MusicDirector
         self.director = MusicDirector()
+        self._director_params: dict = {}
         # auto-director: run on prompt change with debounce
         self._auto_director_timer = QTimer(self)
         self._auto_director_timer.setSingleShot(True)
@@ -609,17 +610,36 @@ class GeneratePage(QWidget):
         self.duration.setValue(float(params.duration_sec))
         self._set_duration(float(params.duration_sec))
         self.intensity.setValue(int(round(params.intensity)))
+        # keep every director-extracted parameter so the full arrangement
+        # (bpm/key/energy/voiceover-safety) reaches generation, not just
+        # the five fields that have visible widgets.
+        self._director_params = {
+            "seed": int(params.seed),
+            "skipped_seed": True,
+            "bpm": params.bpm,
+            "key_root": params.key_root,
+            "key_mode": params.key_mode,
+            "energy_curve": params.energy_curve,
+            "voiceover_safe": params.voiceover_safe,
+        }
+        summary = humanize(params.genre)
+        if params.bpm:
+            summary += f", {params.bpm} BPM"
+        if params.key_root:
+            summary += f", {params.key_root} {params.key_mode or ''}"
+        if params.energy_curve:
+            summary += f", {humanize(params.energy_curve)} arc"
         self.window().statusBar().showMessage(
-            f"AI suggested: {humanize(params.genre)}, "
-            f"{params.duration_sec:.0f}s, intensity {params.intensity:.0f}",
-            5000,
+            f"AI: {summary}, {params.duration_sec:.0f}s, "
+            f"intensity {params.intensity:.0f}",
+            6000,
         )
 
     def current_parameters(self) -> dict:
         if self.auto_seed.isChecked():
             fresh = float(random.randrange(1, 2_147_483_000))
             self.seed.setValue(fresh)
-        return {
+        params = {
             "seed": int(self.seed.value()),
             "genre": self.genre.currentData(),
             "moods": (self.mood.currentData(),),
@@ -627,6 +647,9 @@ class GeneratePage(QWidget):
             "intensity": float(self.intensity.value()),
             "prompt": self.director_prompt.text().strip(),
         }
+        params.update(self._director_params)
+        params.pop("skipped_seed", None)
+        return params
 
     def _emit_request(self) -> None:
         self.generate_requested.emit(self.current_parameters())
