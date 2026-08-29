@@ -20,6 +20,7 @@ from lfms.generator.composer import (
     BassGenerator,
     PadGenerator,
     PulseGenerator,
+    SawDropGenerator,
     SparkleGenerator,
     _clip_events,
 )
@@ -95,6 +96,14 @@ class Arranger:
                 collected.setdefault("MELODY", []).extend(
                     (span.start_sec, event) for event in events
                 )
+            # Super-saw in the drop: high-energy spans of the build->drop arc
+            # get a detuned saw-stab stack over the chords so the peak section
+            # hits with an aggressive EDM texture instead of a flat pad.
+            if curve.name == "INTRO_PEAK_OUTRO" and span.energy >= 0.7 and span.allows("BASS"):
+                collected.setdefault("SAW", []).extend(
+                    (span.start_sec, event)
+                    for event in SawDropGenerator(context, rng_index=index).generate(section_chords)
+                )
             if span.allows("PAD"):
                 collected.setdefault("PAD", []).extend(
                     (span.start_sec, event)
@@ -126,6 +135,9 @@ class Arranger:
                 scale = _scale_for(absolute_start, spans)
                 placed.append(_with_velocity(replace(event, start_sec=absolute_start), scale))
             final_roles[role] = placed
+
+        if curve.name == "INTRO_PEAK_OUTRO":
+            final_roles = _apply_drop_tension_break(final_roles, spans, plan)
 
         return _assemble(plan, chords, spans, curve.name, final_roles)
 
@@ -179,6 +191,42 @@ def _scale_for(absolute_start: float, spans: list[SectionSpan]) -> float:
             # the limiter and read as distortion
             return 0.70 + 0.30 * span.energy
     return 1.0
+
+
+def _apply_drop_tension_break(
+    roles: dict[str, list[NoteEvent]],
+    spans: list[SectionSpan],
+    plan: MusicPlan,
+) -> dict[str, list[NoteEvent]]:
+    """Pull back a half-beat right before the loudest section for drop impact.
+
+    The classic EDM "quiet-right-before-the-drop" trick. Only fires when there
+    are distinct sections (short single-section clips are left untouched) and
+    only strips the driving roles (pulse/bass), keeping pads/sparkle air so the
+    transition still breathes. Deterministic, so output stays reproducible.
+    """
+    if len(spans) < 3:
+        return roles
+    peak = max(spans, key=lambda span: span.energy)
+    if peak.start_sec <= plan.bar_sec:
+        return roles
+    gap = min(plan.beat_sec * 0.5, 0.25)
+    start = peak.start_sec - gap
+    stripped = {"PULSE", "BASS", "MELODY"}
+    changed = False
+    out: dict[str, list[NoteEvent]] = {}
+    for role, events in roles.items():
+        if role in stripped:
+            kept = [
+                event
+                for event in events
+                if not (start - 1e-3 <= event.start_sec < peak.start_sec)
+            ]
+            changed = changed or len(kept) != len(events)
+            out[role] = kept
+        else:
+            out[role] = events
+    return out if changed else roles
 
 
 def _assemble(

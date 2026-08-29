@@ -3,7 +3,7 @@ from __future__ import annotations
 
 APP_NAME = "LongForm Music Studio"
 APP_CODE = "LFMS"
-VERSION = "1.3.2"
+VERSION = "1.3.3"
 GENERATOR_VERSION = "lfms-gen-0.3.0"
 
 APP_TITLE = f"{APP_NAME} {VERSION}"

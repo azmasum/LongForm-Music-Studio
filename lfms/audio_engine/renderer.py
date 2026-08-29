@@ -70,7 +70,7 @@ class OfflineRenderer:
         path.parent.mkdir(parents=True, exist_ok=True)
         ctx = RenderContext(sample_rate=sr, channels=ch)
         limiter = Limiter(sr) if safety_limit else None
-        fade_in = max(1, int(0.005 * sr))   # 5 ms de-click at file start
+        fade_in = max(1, int(0.012 * sr))   # 12 ms de-click at file start
         fade_out = max(1, int(float(fade_out_sec) * sr))  # de-click at file end
         started = time.perf_counter()
         written = 0

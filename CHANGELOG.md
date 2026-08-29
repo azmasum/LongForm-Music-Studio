@@ -6,6 +6,29 @@ All notable changes are documented here. Format based on
 ## [Unreleased]
 
 ### Changed
+- **DJ/EDM mixing pass (v1.3.3)** — fixes the four faults from the audio
+  review (track `LFMS-Electronic-1186801826-212923`):
+  - **Kick vs sub-bass mud**: new per-track EQ high-passes subsonic rumble
+    below 30 Hz on BASS/PAD, and a **kick→bass sidechain** ducks the bass a few
+    dB right after every kick so the low-end stays clean instead of fighting.
+  - **Harsh highs (4–8 kHz)**: a master-bus de-ess dips ~2 dB at 5.2 kHz, plus a
+    deeper ~2.5 dB presence cut on MELODY and a ~3 dB high-tame on HATs, so the
+    hats/lead sit smooth instead of squeaky.
+  - **Mono, flat-mix imaging**: drums are now split per instrument — kick/snare
+    stay dead-center while hats ping-pong across the field — pads widen out,
+    the lead sits slightly off-center, and the master stereo width is raised,
+    doubling the side/mid energy for a properly 3D stage.
+  - **Weak drop (punch)**: high-energy spans of the build→drop arc now get a
+    **super-saw stab layer** (a detuned saw stack doubling the chords, +~4.6×
+    low-mid body) so the drop hits hard and aggressive; long multi-section
+    tracks also pull back half a beat right before the loudest section for the
+    classic "quiet-then-impact" drop trick.
+  - Renderer start-of-file de-click fade lengthened to 12 ms so the re-EQ'd /
+    normalized mix still opens gently (head-clip safety).
+
+## [1.3.2] - released
+
+### Changed
 - **DJ/EDM generation quality (v1.3.2)**:
   - `ELECTRONIC` genre profile boosted: BPM range **104–124 → 120–140**,
     density, pulse energy and brightness raised so club/EDM prompts produce

@@ -257,6 +257,59 @@ class PulseGenerator:
         ]
 
 
+class SawDropGenerator:
+    """Super-saw stab layer that only fires in the high-energy drop.
+
+    Doubles each section's chords with a detuned, slightly-eighth-stacked saw
+    so the drop gains an aggressive, energetic texture (the classic EDM
+    "supersaw in the drop"). Rendered through the already-bright SAW_BASS
+    voice it reinforces the low-mid body without adding harsh 4-8 kHz — a
+    punchy complement to the lead, not more squeak.
+    """
+
+    def __init__(self, plan: MusicPlan, *, rng_index: int = 0) -> None:
+        self.plan = plan
+        self._rng = np.random.default_rng(
+            SeedSystem(plan.seed).derive("saw_drop", rng_index)
+        )
+
+    def generate(self, chords: list[ChordSegment]) -> list[NoteEvent]:
+        events: list[NoteEvent] = []
+        for segment in chords:
+            voicing = voicing_for_chord(
+                list(segment.pitch_classes),
+                center_midi=self.plan.register_center - 12,
+                bass_rotation=0,
+            )
+            # eighth-note saw stabs across the chord, detuned a touch so the
+            # stack sounds big without being a literal rigid pad.
+            bar_beats = segment.duration_sec / self.plan.beat_sec
+            n_stabs = max(2, int(round(bar_beats * 2)))
+            step = segment.duration_sec / n_stabs
+            velocity = float(np.clip(62.0 + self._rng.uniform(-6.0, 6.0), 40.0, 90.0))
+            for i in range(n_stabs):
+                start = segment.start_sec + i * step
+                duration = max(step * 0.9, segment.end_sec - start)
+                duration = min(duration, segment.end_sec - start)
+                if start >= segment.end_sec - 1e-6:
+                    break
+                detune = int(self._rng.integers(-2, 3))
+                for midi in voicing:
+                    if self._rng.random() < 0.35:
+                        continue
+                    events.append(
+                        NoteEvent(
+                            start_sec=start,
+                            duration_sec=duration,
+                            midi=int(midi + detune),
+                            velocity=velocity,
+                            role="SAW",
+                            instrument="SAW_BASS",
+                        )
+                    )
+        return events
+
+
 def _clip_events(events: list[NoteEvent], duration_sec: float) -> list[NoteEvent]:
     clipped: list[NoteEvent] = []
     for event in events:
