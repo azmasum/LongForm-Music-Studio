@@ -18,7 +18,7 @@ ROLE_GAINS_DB = {
     "MELODY": -9.0,
     "BASS": -8.0,
     "SPARKLE": -13.0,
-    "PULSE": -16.0,
+    "PULSE": -6.0,
 }
 
 _VOICEOVER_SAFE_EXTRA_DB = {"MELODY": -3.0, "SPARKLE": -4.0}
