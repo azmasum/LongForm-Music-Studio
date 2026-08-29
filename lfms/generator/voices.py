@@ -229,6 +229,7 @@ class KickVoice(VoiceBase):
     def _build(self) -> None:
         base = float(np.clip(midi_to_freq(self.note.midi), 40.0, 90.0))
         self.f_start = base * 2.2
+        self.mid_freq = base * 2.0  # second harmonic -> audible thump on laptop speakers
 
     def _osc(self, n: int) -> np.ndarray:
         idx = np.arange(int(n), dtype=np.float64) / self.sample_rate
@@ -238,8 +239,12 @@ class KickVoice(VoiceBase):
         self._phase = float(phase[-1] % 1.0)
         self._elapsed = float(time[-1]) + 1.0 / self.sample_rate
         body = np.sin(2.0 * np.pi * phase) * np.exp(-time * 5.5)
-        click = np.exp(-time * 220.0) * 0.35
-        return (body + click).astype(np.float64)
+        mid = np.sin(2.0 * np.pi * self.mid_freq * time) * np.exp(-time * 9.0) * 0.5
+        click = np.exp(-time * 220.0) * 0.25
+        # short anti-click onset so the pitch-drop transient stays punchy
+        # (thump) yet doesn't bang at the very start of the track
+        onset = np.clip(time / 0.0035, 0.0, 1.0)
+        return ((body + mid + click) * onset).astype(np.float64)
 
 
 class HatVoice(VoiceBase):

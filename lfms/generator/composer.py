@@ -183,7 +183,7 @@ class PulseGenerator:
                         start_sec=max(0.0, kick_start + float(self._rng.uniform(-jitter, jitter))),
                         duration_sec=0.42,
                         midi=36,
-                        velocity=float(np.clip(38.0 + 34.0 * level, 10.0, 90.0)),
+                        velocity=float(np.clip(42.0 + 34.0 * level, 12.0, 92.0)),
                         role="PULSE",
                         instrument="KICK",
                     )
