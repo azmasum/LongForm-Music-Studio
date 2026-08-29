@@ -228,6 +228,12 @@ def test_default_sine_source():
 _GUI_SMOKE = os.environ.get("LFMS_GUI_SMOKE") == "1"
 
 
+@pytest.fixture(autouse=True)
+def _gui_qapp(qapp):
+    """Give every GUI test a real QApplication so native Qt crashes can't hit."""
+    return qapp
+
+
 @pytest.mark.skipif(not _GUI_SMOKE, reason="set LFMS_GUI_SMOKE=1 to run GUI tests")
 def test_piano_roll_scene_load_clip():
     from lfms.app.piano_roll import PianoRollScene
