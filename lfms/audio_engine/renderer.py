@@ -60,6 +60,7 @@ class OfflineRenderer:
         on_progress: ProgressCallback | None = None,
         job_control: RenderJobControl | None = None,
         safety_limit: bool = True,
+        fade_out_sec: float = 0.012,
     ) -> RenderResult:
         sr = int(sample_rate or graph.sample_rate)
         ch = int(channels or graph.channels)
@@ -70,7 +71,7 @@ class OfflineRenderer:
         ctx = RenderContext(sample_rate=sr, channels=ch)
         limiter = Limiter(sr) if safety_limit else None
         fade_in = max(1, int(0.005 * sr))   # 5 ms de-click at file start
-        fade_out = max(1, int(0.012 * sr))  # 12 ms de-click at file end
+        fade_out = max(1, int(float(fade_out_sec) * sr))  # de-click at file end
         started = time.perf_counter()
         written = 0
         sum_squares = 0.0

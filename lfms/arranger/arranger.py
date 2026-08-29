@@ -29,6 +29,27 @@ from lfms.generator.melody import MelodyGenerator
 from lfms.generator.plan import GenerationParameters, MusicPlan
 
 _DEFAULT_LONG_CURVE = "DOCUMENTARY"
+_DANCY_GENRES = {
+    "ELECTRONIC",
+    "TECHNOLOGY",
+    "FUTURISTIC",
+    "INSPIRATIONAL",
+    "MOTIVATIONAL",
+    "CORPORATE",
+    "ACOUSTIC",
+}
+
+
+def _default_curve(plan: MusicPlan) -> str:
+    if plan.duration_sec >= 600.0:
+        return _DEFAULT_LONG_CURVE
+    if plan.genre in _DANCY_GENRES or plan.drums != "NONE":
+        # DJ/EDM & beat-driven tracks build tension toward a peak drop
+        # instead of sitting flat, so short clips feel driving, not ambient.
+        return "INTRO_PEAK_OUTRO"
+    return "FLAT"
+
+
 _OCTAVE_SHIFT_CHOICES: dict[str, tuple[int, ...]] = {
     "VARIATION_A": (-12, 0, 12),
     "VARIATION_B": (-12, 0, 12),
@@ -111,7 +132,7 @@ class Arranger:
     def _energy_curve(self) -> EnergyCurve:
         preset = self.params.energy_curve
         if preset is None:
-            preset = _DEFAULT_LONG_CURVE if self.plan.duration_sec >= 600.0 else "FLAT"
+            preset = _default_curve(self.plan)
         return EnergyCurve.from_preset(
             preset,
             seed=self.plan.seed,

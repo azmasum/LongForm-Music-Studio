@@ -54,7 +54,7 @@ _GENRE_PROFILES: dict[str, _GenreProfile] = {
     "LOFI": _GenreProfile((68, 82), 0.44, 1900, 0.16, 0.60, 56, "PIANO", ("MINOR", "DORIAN"), 0.35),
     "CHILL": _GenreProfile((72, 86), 0.42, 2000, 0.12, 0.60, 57, "PLUCK", ("MINOR", "DORIAN"), 0.38),
     "MINIMAL": _GenreProfile((96, 112), 0.34, 2300, 0.18, 0.40, 57, "PLUCK", ("MINOR", "DORIAN"), 0.30),
-    "ELECTRONIC": _GenreProfile((104, 124), 0.44, 2600, 0.26, 0.50, 57, "PLUCK", ("MINOR", "DORIAN"), 0.28),
+    "ELECTRONIC": _GenreProfile((120, 140), 0.54, 3000, 0.34, 0.50, 57, "PLUCK", ("MINOR", "DORIAN"), 0.20),
     "CLASSICAL_INSPIRED": _GenreProfile((72, 96), 0.46, 2500, 0.06, 0.70, 58, "PIANO", ("MAJOR", "MINOR"), 0.38),
     "NATURE": _GenreProfile((60, 76), 0.30, 1700, 0.04, 0.40, 57, "PLUCK", ("MAJOR", "DORIAN"), 0.45),
     "NEWS": _GenreProfile((96, 110), 0.50, 2600, 0.20, 0.55, 58, "PLUCK", ("MAJOR", "MIXOLYDIAN"), 0.25),

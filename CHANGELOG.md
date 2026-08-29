@@ -5,6 +5,28 @@ All notable changes are documented here. Format based on
 
 ## [Unreleased]
 
+### Changed
+- **DJ/EDM generation quality (v1.3.2)**:
+  - `ELECTRONIC` genre profile boosted: BPM range **104–124 → 120–140**,
+    density, pulse energy and brightness raised so club/EDM prompts produce
+    a driving, high-tempo groove instead of a slow ambient bed.
+  - Short beat-driven tracks (EDM/tech house/festival + any explicit-drums
+    genre) now use a **build → peak → release energy curve**
+    (`INTRO_PEAK_OUTRO`) instead of flat energy, so clips build tension into
+    a drop rather than sitting at a constant, ambient level.
+  - **Master bus glue**: all renders now run through a soft limiter (0.95
+    ceiling) plus gentle stereo widening on the master bus, giving the mix a
+    produced, cohesive "glued" sound with controlled peaks.
+  - **Loudness normalization**: sparse/quiet arrangements whose peak never
+    reaches full scale are automatically boosted to a healthy 0.85 peak
+    (30 ms de-click fade-out preserved), so output reads as loud, mastered
+    music instead of a weak, faint mist. Already-hot mixes are left untouched.
+- EDM instrument texture favors **saw bass** leads and a brighter, less
+  reverbed pad so festival/tech-house prompts feel aggressive rather than
+  ambient.
+
+## [Unreleased]
+
 ### Added
 - **Timeline editing (Phase A studio roadmap)**:
   - **Import audio files** into the timeline (WAV/FLAC/OGG/MP3/AIFF) — new
