@@ -310,6 +310,63 @@ class SawDropGenerator:
         return events
 
 
+class CrowdChantGenerator:
+    """Rhythmic crowd 'HEY' chant for festival / DJ sections.
+
+    Emits short, shouty chant hits (instrument CHANT -> ChantVoice) on the
+    beat inside high-energy spans so a "crowd chanting hey" prompt actually
+    delivers sung/called chant instead of nothing. Two call-and-response
+    pitches (root, then fifth of the section) keep it musical and in-key.
+    Deterministic via its own seeded RNG.
+    """
+
+    def __init__(self, plan: MusicPlan, *, rng_index: int = 0) -> None:
+        self.plan = plan
+        self._rng = np.random.default_rng(
+            SeedSystem(plan.seed).derive("chant", rng_index)
+        )
+
+    def generate(self, chords: list[ChordSegment]) -> list[NoteEvent]:
+        if not chords:
+            return []
+        # A crowd shout sits around the tenor register, an octave+ above the
+        # low root so it sits on top of the supersaw/bass body without muddying.
+        root_pc = chords[0].pitch_classes[0]
+        low = _pc_to_midi(root_pc, target_midi=64)
+        fifth = _pc_to_midi((root_pc + 7) % 12, target_midi=64)
+        events: list[NoteEvent] = []
+        for segment in chords:
+            beat = self.plan.beat_sec
+            step = beat / 2.0  # eighth-note "hey hey hey hey"
+            n_hits = max(1, int(round(segment.duration_sec / step)))
+            for i in range(n_hits):
+                start = segment.start_sec + i * step
+                if start >= segment.end_sec - 1e-6:
+                    break
+                if float(self._rng.random()) < 0.20:
+                    continue  # human-feeling rhythmic gaps
+                # alternate root / fifth for a call-and-response chant
+                midi = low if (i // 2) % 2 == 0 else fifth
+                velocity = float(np.clip(58.0 + self._rng.uniform(-8.0, 8.0), 40.0, 92.0))
+                events.append(
+                    NoteEvent(
+                        start_sec=start,
+                        duration_sec=min(step * 0.8, segment.end_sec - start),
+                        midi=int(midi),
+                        velocity=velocity,
+                        role="CHANT",
+                        instrument="CHANT",
+                    )
+                )
+        return events
+
+
+def _pc_to_midi(pitch_class: int, target_midi: int) -> int:
+    """Nearest MIDI note with the given pitch class to ``target_midi``."""
+    base = target_midi - (target_midi - pitch_class) % 12
+    return base
+
+
 def _clip_events(events: list[NoteEvent], duration_sec: float) -> list[NoteEvent]:
     clipped: list[NoteEvent] = []
     for event in events:

@@ -43,6 +43,7 @@ class Composition:
     sample_rate: int = 48000
     brightness_hz: float = 1800.0
     voiceover_safe: bool = False
+    crowd_chant: bool = False
     bpm: int = 90
     key_name: str = ""
     sections: list = field(default_factory=list)

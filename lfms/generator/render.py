@@ -237,13 +237,25 @@ class CompositionRenderer:
             container.value if isinstance(container, ExportContainer) else str(container)
         )
         renderer = OfflineRenderer()
+        # Keep the caller's UI alive AND progress monotonic across a possible
+        # loudness-normalization second pass. The first pass maps its native
+        # [0,1] progress onto [0, SPLIT]; if normalization re-renders, that
+        # second pass maps onto [SPLIT, 1.0]. Because both passes drive the
+        # caller's callback (which ordinarily pumps the GUI event loop), the
+        # app never freezes at "100%" mid-normalize — the reported figure is
+        # monotonic non-decreasing, so callers that assert that still pass.
+        split = 0.85
+        def first_progress(p: float) -> None:
+            if on_progress is not None:
+                on_progress(0.85 * max(0.0, min(1.0, p)))
+
         result = renderer.render(
             self.build_graph(),
             destination,
             self.composition.duration_sec,
             container=container_name,
             bit_depth=bit_depth,
-            on_progress=on_progress,
+            on_progress=first_progress,
             job_control=job_control,
         )
         # Loudness normalize: sparse/quiet arrangements can come out far too
@@ -254,19 +266,24 @@ class CompositionRenderer:
             boost_db = gain_to_db(NORMALIZE_TARGET / result.peak)
             boost_db = min(boost_db, NORMALIZE_MAX_DB)
             if boost_db > 1.0:
-                # The first pass already reported 0->1 progress; keeping the
-                # loudness-normalized re-render silent preserves a monotonic
-                # overall progress sequence for the caller.
+                def second_progress(p: float) -> None:
+                    if on_progress is not None:
+                        on_progress(split + (1.0 - split) * max(0.0, min(1.0, p)))
+
                 result = renderer.render(
                     self.build_graph(master_boost_db=boost_db),
                     destination,
                     self.composition.duration_sec,
                     container=container_name,
                     bit_depth=bit_depth,
-                    on_progress=None,
+                    on_progress=second_progress,
                     job_control=job_control,
                     fade_out_sec=NORMALIZE_FADE_OUT,
                 )
+        elif on_progress is not None:
+            # Single-pass path: fold the reserved tail up to 100% so the
+            # reported figure ends at 1.0 exactly.
+            on_progress(1.0)
         return result
 
 

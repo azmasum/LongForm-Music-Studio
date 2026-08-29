@@ -258,6 +258,34 @@ def interpret_prompt(prompt: str) -> tuple[dict, list[str]]:
             notes.append(f"energy={curve}")
             break
 
+    # Crowd chant / vocal-exclusion handling with contradiction detection.
+    # A "crowd chanting hey" request and a "no vocals / instrumental"
+    # request are mutually exclusive; when both appear we honour the chant
+    # but flag the tension so the user can resolve it.
+    _CHANT_WORDS = (
+        "crowd chant", "crowd chanting", "crowd going wild",
+        "chanting", "chant", "hands up", "hey chorus", "stadium chant",
+    )
+    _NO_VOCALS_WORDS = (
+        "no vocals", "without vocals", "no vocal", "without vocal",
+        "no voice", "no singing", "without singing", "no singing",
+        "instrumental", "no lyrics", "no voices",
+    )
+    chant = any(w in text for w in _CHANT_WORDS)
+    no_vocals = any(w in text for w in _NO_VOCALS_WORDS)
+    if chant:
+        payload["crowd_chant"] = True
+        notes.append("crowd chant")
+    if no_vocals:
+        payload["exclude_vocals"] = True
+        notes.append("no vocals (vocal excluded)")
+    if chant and no_vocals:
+        notes.append(
+            "warning: prompt asks for both 'crowd chanting' and 'no "
+            "vocals' - these conflict; keeping the chant, dropping the "
+            "vocal-exclusion"
+        )
+
     known = set(known_moods())
     payload["moods"] = [m for m in payload["moods"] if m in known]
     return payload, notes

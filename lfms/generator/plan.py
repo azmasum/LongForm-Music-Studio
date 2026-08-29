@@ -150,6 +150,8 @@ class GenerationParameters:
     drums: bool = False
     drum_energy: float = 50.0
     drum_style: str = ""
+    crowd_chant: bool = False
+    exclude_vocals: bool = False
 
     def validate(self) -> None:
         if self.genre not in _GENRE_PROFILES:
@@ -213,6 +215,7 @@ class MusicPlan:
     drums: str = "NONE"  # NONE | LIGHT | FULL | TRIBAL | FOUR_FLOOR
     sample_rate: int = DEFAULT_SAMPLE_RATE
     voiceover_safe: bool = False
+    crowd_chant: bool = False
     fingerprint: str = field(default="")
 
     @property
@@ -338,6 +341,7 @@ def build_plan(params: GenerationParameters) -> MusicPlan:
         drums=drum_mode,
         sample_rate=int(params.sample_rate),
         voiceover_safe=bool(params.voiceover_safe),
+        crowd_chant=bool(params.crowd_chant),
         fingerprint=plan_fingerprint,
     )
 

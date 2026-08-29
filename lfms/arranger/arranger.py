@@ -18,6 +18,7 @@ from lfms.core.seed import SeedSystem
 from lfms.core.version import GENERATOR_VERSION
 from lfms.generator.composer import (
     BassGenerator,
+    CrowdChantGenerator,
     PadGenerator,
     PulseGenerator,
     SawDropGenerator,
@@ -103,6 +104,19 @@ class Arranger:
                 collected.setdefault("SAW", []).extend(
                     (span.start_sec, event)
                     for event in SawDropGenerator(context, rng_index=index).generate(section_chords)
+                )
+            # Crowd "HEY" chant: only when the prompt explicitly asked for a
+            # crowd chant, and only in the highest-energy drop spans where the
+            # festival crowd would actually be shouting along.
+            if (
+                plan.crowd_chant
+                and curve.name == "INTRO_PEAK_OUTRO"
+                and span.energy >= 0.7
+                and span.allows("PULSE")
+            ):
+                collected.setdefault("CHANT", []).extend(
+                    (span.start_sec, event)
+                    for event in CrowdChantGenerator(context, rng_index=index).generate(section_chords)
                 )
             if span.allows("PAD"):
                 collected.setdefault("PAD", []).extend(
@@ -250,6 +264,7 @@ def _assemble(
         sample_rate=plan.sample_rate,
         brightness_hz=plan.brightness_hz,
         voiceover_safe=plan.voiceover_safe,
+        crowd_chant=plan.crowd_chant,
         bpm=plan.bpm,
         key_name=plan.key_name,
         sections=list(spans),

@@ -326,6 +326,43 @@ class ChoirVoice(VoiceBase):
         return self.tame.process(shaped)
 
 
+class ChantVoice(VoiceBase):
+    """Short, shouty 'HEY' crowd chant.
+
+    Fast attack + a close, shouted-syllable formant pair so the chant cuts
+    through a festival mix like a crowd shouting on the beat instead of a
+    slow swell. A slight downward pitch-glide on each hit gives it the
+    classic call-out intonation.
+    """
+
+    def __init__(self, sample_rate: int, note: NoteEvent, timbre: dict) -> None:
+        self.timbre = timbre
+        super().__init__(
+            sample_rate, note,
+            attack=0.012, decay=0.25, sustain=0.28, release=0.06,
+        )
+
+    def _build(self) -> None:
+        freq = midi_to_freq(self.note.midi)
+        self.osc = Oscillator(
+            self.sample_rate, wave="TRIANGLE", frequency=freq,
+            unison_voices=4, detune_cents=14.0,
+            am_rate=6.5, am_depth=0.30,
+        )
+        low = BiquadFilter(self.sample_rate, kind="bandpass", cutoff=820.0, q=1.6)
+        mid = BiquadFilter(self.sample_rate, kind="bandpass", cutoff=1900.0, q=2.0)
+        self._low = low
+        self._mid = mid
+        self.tame = BiquadFilter(self.sample_rate, kind="lowpass", cutoff=3800.0, q=0.5)
+
+    def _osc(self, n: int) -> np.ndarray:
+        return self.osc.process(n)
+
+    def _shape(self, signal: np.ndarray) -> np.ndarray:
+        voiced = 0.5 * self._low.process(signal) + 0.35 * self._mid.process(signal)
+        return self.tame.process(voiced)
+
+
 class OrganVoice(VoiceBase):
     """Additive drawbar organ: f + 2f + 3f sines."""
 
@@ -497,6 +534,7 @@ _VOICE_CLASSES = {
     "HAT": HatVoice,
     "STRINGS": StringsVoice,
     "CHOIR": ChoirVoice,
+    "CHANT": ChantVoice,
     "ORGAN": OrganVoice,
     "EPIANO": EPianoVoice,
     "MARIMBA": MarimbaVoice,

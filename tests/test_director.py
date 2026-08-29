@@ -165,6 +165,43 @@ def test_half_an_hour_phrase():
     assert payload["duration_sec"] == 1800.0
 
 
+def test_crowd_chant_prompt_requests_chant():
+    payload, notes = interpret_prompt(
+        "festival edm with a crowd chanting hey, 150 bpm"
+    )
+    assert payload["genre"] == "ELECTRONIC"
+    assert payload.get("crowd_chant") is True
+    assert any("chant" in n for n in notes)
+
+
+def test_no_vocals_prompt_sets_exclusion():
+    payload, notes = interpret_prompt("instrumental electronic, no vocals")
+    assert payload.get("exclude_vocals") is True
+    assert any("no vocals" in n for n in notes)
+
+
+def test_chant_and_no_vocals_conflict_flagged():
+    payload, notes = interpret_prompt(
+        "festival edm with a crowd chanting hey but no vocals"
+    )
+    assert payload.get("crowd_chant") is True
+    assert any("conflict" in n and "warning" in n for n in notes)
+
+
+def test_crowd_chant_reaches_composition_for_festival_edm():
+    from lfms.director.service import coerce_payload
+
+    prompt = "festival edm for 90 seconds, four on the floor, crowd chanting hey"
+    payload, _ = interpret_prompt(prompt)
+    clean, _ = coerce_payload(payload, prompt)
+    params = params_from_payload(clean)
+    comp = Composer(params).compose()
+    assert comp.crowd_chant is True
+    chants = [e for e in comp.events() if e.role == "CHANT"]
+    assert len(chants) > 0
+    assert all(e.instrument == "CHANT" for e in chants)
+
+
 # --------------------------------------------------------------- gating
 
 def test_director_disabled_by_default_and_requires_consent():
