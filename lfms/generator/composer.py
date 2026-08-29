@@ -198,7 +198,7 @@ class PulseGenerator:
                                 start_sec=max(0.0, hat_time + float(self._rng.uniform(-jitter, jitter))),
                                 duration_sec=0.09,
                                 midi=42,
-                                velocity=float(np.clip(16.0 + 22.0 * level, 8.0, 60.0)),
+                                velocity=float(np.clip(44.0 + 30.0 * min(1.0, level), 20.0, 90.0)),
                                 role="PULSE",
                                 instrument="HAT",
                             )
