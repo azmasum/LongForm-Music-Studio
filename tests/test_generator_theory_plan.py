@@ -117,3 +117,34 @@ def test_all_genres_have_profiles():
     for genre in known_genres():
         plan = build_plan(_params(genre=genre, duration_sec=30.0))
         assert plan.bar_sec > 0
+
+
+def test_new_style_controls_defaults_and_wiring():
+    plan = build_plan(_params())
+    assert plan.drop_intensity == 50.0
+    assert plan.bass_distortion == 0.0
+    assert plan.supersaw_brightness == 50.0
+    assert plan.sidechain_amount == 100.0
+    custom = build_plan(
+        _params(
+            drop_intensity=80.0,
+            bass_distortion=60.0,
+            supersaw_brightness=20.0,
+            sidechain_amount=40.0,
+        )
+    )
+    assert custom.drop_intensity == 80.0
+    assert custom.bass_distortion == 60.0
+    assert custom.supersaw_brightness == 20.0
+    assert custom.sidechain_amount == 40.0
+
+
+def test_new_style_controls_range_validation():
+    for name, bad in (
+        ("drop_intensity", 101.0),
+        ("bass_distortion", -1.0),
+        ("supersaw_brightness", 150.0),
+        ("sidechain_amount", -5.0),
+    ):
+        with pytest.raises(ValidationError):
+            build_plan(_params(**{name: bad}))

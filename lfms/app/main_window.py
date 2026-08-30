@@ -490,6 +490,34 @@ class GeneratePage(QWidget):
         intensity_row = QHBoxLayout()
         intensity_row.addWidget(self.intensity, stretch=1)
         intensity_row.addWidget(self.intensity_value)
+        self.drop_intensity = QSlider(Qt.Horizontal)
+        self.drop_intensity.setRange(0, 100)
+        self.drop_intensity.setValue(50)
+        self.drop_intensity_value = QLabel("50")
+        drop_row = QHBoxLayout()
+        drop_row.addWidget(self.drop_intensity, stretch=1)
+        drop_row.addWidget(self.drop_intensity_value)
+        self.bass_distortion = QSlider(Qt.Horizontal)
+        self.bass_distortion.setRange(0, 100)
+        self.bass_distortion.setValue(0)
+        self.bass_distortion_value = QLabel("0")
+        bass_d_row = QHBoxLayout()
+        bass_d_row.addWidget(self.bass_distortion, stretch=1)
+        bass_d_row.addWidget(self.bass_distortion_value)
+        self.supersaw_brightness = QSlider(Qt.Horizontal)
+        self.supersaw_brightness.setRange(0, 100)
+        self.supersaw_brightness.setValue(50)
+        self.supersaw_brightness_value = QLabel("50")
+        saw_br_row = QHBoxLayout()
+        saw_br_row.addWidget(self.supersaw_brightness, stretch=1)
+        saw_br_row.addWidget(self.supersaw_brightness_value)
+        self.sidechain_amount = QSlider(Qt.Horizontal)
+        self.sidechain_amount.setRange(0, 100)
+        self.sidechain_amount.setValue(100)
+        self.sidechain_amount_value = QLabel("100")
+        sc_row = QHBoxLayout()
+        sc_row.addWidget(self.sidechain_amount, stretch=1)
+        sc_row.addWidget(self.sidechain_amount_value)
         self.seed = QDoubleSpinBox()
         self.seed.setRange(0, 2_147_483_647)
         self.seed.setDecimals(0)
@@ -513,6 +541,10 @@ class GeneratePage(QWidget):
         adv_layout.addRow("Genre", self.genre)
         adv_layout.addRow("Mood", self.mood)
         adv_layout.addRow("Intensity", intensity_row)
+        adv_layout.addRow("Drop intensity", drop_row)
+        adv_layout.addRow("Bass distortion", bass_d_row)
+        adv_layout.addRow("Supersaw brightness", saw_br_row)
+        adv_layout.addRow("Sidechain amount", sc_row)
         adv_layout.addRow("Seed", seed_outer)
         adv_layout.addRow("Director", provider_row)
         outer.addWidget(advanced_box)
@@ -553,6 +585,10 @@ class GeneratePage(QWidget):
             lambda: self.seed.setValue(float(random.randrange(1, 1_000_000)))
         )
         self.intensity.valueChanged.connect(self.intensity_value.setNum)
+        self.drop_intensity.valueChanged.connect(self.drop_intensity_value.setNum)
+        self.bass_distortion.valueChanged.connect(self.bass_distortion_value.setNum)
+        self.supersaw_brightness.valueChanged.connect(self.supersaw_brightness_value.setNum)
+        self.sidechain_amount.valueChanged.connect(self.sidechain_amount_value.setNum)
         self.generate_button.clicked.connect(self._emit_request)
         self.choose_output_dir.clicked.connect(self._choose_output_dir)
         self.open_output_dir.clicked.connect(self._open_output_dir)
@@ -645,6 +681,10 @@ class GeneratePage(QWidget):
             "moods": (self.mood.currentData(),),
             "duration_sec": float(self.duration.value()),
             "intensity": float(self.intensity.value()),
+            "drop_intensity": float(self.drop_intensity.value()),
+            "bass_distortion": float(self.bass_distortion.value()),
+            "supersaw_brightness": float(self.supersaw_brightness.value()),
+            "sidechain_amount": float(self.sidechain_amount.value()),
             "prompt": self.director_prompt.text().strip(),
         }
         params.update(self._director_params)

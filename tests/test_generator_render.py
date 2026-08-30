@@ -69,3 +69,26 @@ def test_voiceover_safe_alters_mix(tmp_path: Path):
     safe_params = _params(genre="PIANO", intensity=60.0, voiceover_safe=True)
     quick_generate(safe_params, safe)
     assert normal.read_bytes() != safe.read_bytes()
+
+
+def test_style_controls_change_render_output(tmp_path: Path):
+    base = _params(genre="ELECTRONIC", intensity=60.0, duration_sec=8.0)
+    baseline = tmp_path / "baseline.wav"
+    bright = tmp_path / "bright.wav"
+    dist = tmp_path / "dist.wav"
+    quick_generate(base, baseline)
+    quick_generate(
+        _params(genre="ELECTRONIC", intensity=60.0, duration_sec=8.0,
+                supersaw_brightness=100.0, bass_distortion=80.0,
+                sidechain_amount=100.0, drop_intensity=100.0),
+        bright,
+    )
+    quick_generate(
+        _params(genre="ELECTRONIC", intensity=60.0, duration_sec=8.0,
+                supersaw_brightness=0.0, bass_distortion=0.0,
+                sidechain_amount=0.0, drop_intensity=0.0),
+        dist,
+    )
+    # Confirm the controls actually influence the rendered audio.
+    assert baseline.read_bytes() != bright.read_bytes()
+    assert bright.read_bytes() != dist.read_bytes()

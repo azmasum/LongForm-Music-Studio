@@ -44,6 +44,10 @@ class Composition:
     brightness_hz: float = 1800.0
     voiceover_safe: bool = False
     crowd_chant: bool = False
+    drop_intensity: float = 50.0
+    bass_distortion: float = 0.0
+    supersaw_brightness: float = 50.0
+    sidechain_amount: float = 100.0
     bpm: int = 90
     key_name: str = ""
     sections: list = field(default_factory=list)

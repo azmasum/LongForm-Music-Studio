@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 
 from lfms.audio_engine.dsp import db_to_gain, gain_to_db
-from lfms.audio_engine.effects import SoftLimiter, StereoWidth
+from lfms.audio_engine.effects import DriveEffect, SoftLimiter, StereoWidth
 from lfms.audio_engine.filters import BiquadFilter
 from lfms.audio_engine.graph import AudioGraph
 from lfms.audio_engine.jobcontrol import RenderJobControl
@@ -183,7 +183,11 @@ class CompositionRenderer:
         comp = self.composition
         graph = AudioGraph(comp.sample_rate)
         timbre = {"brightness_hz": comp.brightness_hz}
-        bass_duck = _kick_duck_envelope(comp, comp.sample_rate)
+        bass_duck = _kick_duck_envelope(
+            comp,
+            comp.sample_rate,
+            reduction_db=4.0 * (float(comp.sidechain_amount) / 100.0),
+        )
         for index, (track_name, role, events) in enumerate(_tracks_for(comp)):
             gain = ROLE_GAINS_DB.get(role, -10.0)
             if comp.voiceover_safe:
@@ -195,6 +199,19 @@ class CompositionRenderer:
                 seed=comp.seed,
             )
             effects = list(_role_eq(comp.sample_rate, track_name))
+            if role == "BASS" and float(comp.bass_distortion) > 0.0:
+                drive = 0.7 * float(comp.bass_distortion) / 100.0
+                effects.append(DriveEffect(drive=max(0.05, drive)))
+            if role == "SAW":
+                effects.append(
+                    EqEffect(
+                        comp.sample_rate,
+                        high_cutoff=5200.0,
+                        high_gain_db=(float(comp.supersaw_brightness) - 50.0) * 0.10,
+                    )
+                )
+            if role == "SAW":
+                gain += (float(comp.drop_intensity) - 50.0) * 0.05
             strip = graph.create_track(
                 track_name.lower(),
                 source,

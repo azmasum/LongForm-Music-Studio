@@ -5,6 +5,25 @@ All notable changes are documented here. Format based on
 
 ## [Unreleased]
 
+### Added
+- **User-tunable EDM/festival style controls (v1.3.4)** — four new sliders in
+  the Generate page's Advanced settings panel, each flowing into the renderer:
+  - **Drop intensity** — boosts the super-saw lead gain around the drop so it
+    hits harder.
+  - **Bass distortion** — tanh soft-clip drive on the bass track for warm,
+    festival-style grit (0 = clean).
+  - **Supersaw brightness** — high-shelf EQ on the saw layer to shine or tame
+    the bright top end.
+  - **Sidechain amount** — how strongly the kick ducks the bass (0 = no duck,
+    100 = full pump), giving that classic EDM pump.
+  - Backed by plan/event fields with `[0, 100]` validation, plus new render DSP
+    (`DriveEffect`, high-shelf `EqEffect`) and tests.
+- **Crowd "HEY" chant** for high-energy festival/EDM drops when the prompt asks
+  for a crowd to chant: synthesized shout layer gated to the loudest spans of
+  the INTRO→PEAK→OUTRO arc.
+- **Prompt validation**: detects "crowd chant" (adds chant) and
+  "no vocals"/"instrumental" (drops vocals); flags a conflict if both appear.
+
 ### Changed
 - **DJ/EDM mixing pass (v1.3.3)** — fixes the four faults from the audio
   review (track `LFMS-Electronic-1186801826-212923`):

@@ -3,6 +3,8 @@ import numpy as np
 import pytest
 
 from lfms.audio_engine.dsp import band_energy, peak, rms
+from lfms.audio_engine.effects import DriveEffect
+from lfms.audio_engine.studio_fx import EqEffect
 from lfms.core.errors import ValidationError
 from lfms.mixer import (
     EFFECT_TYPES,
@@ -168,3 +170,34 @@ def test_unknown_preset_raises():
         preset_recipe("NOPE")
     with pytest.raises(ValidationError):
         EffectChain.from_preset("NOPE", SR)
+
+
+def test_drive_effect_zero_is_neutral_and_high_adds_harmonics():
+    sine = _sine(220.0, 0.5, amp=0.4)
+    neutral = DriveEffect(drive=0.0).process(sine)
+    assert np.array_equal(neutral, sine)
+    heavy = DriveEffect(drive=1.0).process(sine)
+    # Tanh saturation reshapes the wave (adds warmth/harmonics), never exceeds 1.0.
+    assert not np.array_equal(heavy, sine)
+    assert peak(heavy) <= 1.0
+    # More drive means more reshaping.
+    mid = DriveEffect(drive=0.3).process(sine)
+    assert not np.array_equal(mid, sine)
+    # Drive keeps the signal bounded regardless of drive level.
+    for d in (0.1, 0.5, 1.0):
+        assert peak(DriveEffect(drive=d).process(_sine(110.0, 0.5, amp=0.9))) <= 1.0
+    # mix=0 keeps signal untouched.
+    assert np.array_equal(DriveEffect(drive=1.0, mix=0.0).process(sine), sine)
+
+
+def test_eq_high_shelf_boosts_and_cuts_treble():
+    treble = _sine(9000.0, 1.0)
+    boost = 4.0 * _energy_at(treble, 8000.0, 12000.0)
+    eq_boost = EqEffect(SR, high_cutoff=5200.0, high_gain_db=5.0)
+    eq_cut = EqEffect(SR, high_cutoff=5200.0, high_gain_db=-5.0)
+    out_boost = eq_boost.process(treble)
+    out_cut = eq_cut.process(treble)
+    in_e = _energy_at(treble, 8000.0, 12000.0)
+    assert _energy_at(out_boost, 8000.0, 12000.0) > in_e * 1.5
+    assert _energy_at(out_cut, 8000.0, 12000.0) < in_e * 0.7
+    assert boost > 0

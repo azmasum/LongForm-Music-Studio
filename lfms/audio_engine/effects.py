@@ -33,6 +33,29 @@ class SoftLimiter(Effect):
         return soft_clip(block.astype(np.float64), self.threshold).astype(np.float32)
 
 
+class DriveEffect(Effect):
+    """Soft-clip saturation for warm bass/festival distortion.
+
+    ``drive`` (0-1) scales how hard the signal is pushed into the soft clip:
+    0 = untouched, 1 = heaviest. Low drives fatten and warm; high drives add
+    obvious grit. ``mix`` blends dry + wet (default fully wet).
+    """
+
+    def __init__(self, drive: float = 0.3, mix: float = 1.0) -> None:
+        self.drive = max(0.0, min(1.0, float(drive)))
+        self.mix = max(0.0, min(1.0, float(mix)))
+
+    def process(self, block: np.ndarray) -> np.ndarray:
+        if self.drive <= 0.0:
+            return block
+        work = block.astype(np.float64)
+        amount = 1.0 + 3.5 * self.drive
+        wet = np.tanh(amount * work) / np.tanh(amount)
+        if self.mix >= 1.0:
+            return wet.astype(np.float32)
+        return (work + self.mix * (wet - work)).astype(np.float32)
+
+
 class DCBlockEffect(Effect):
     def __init__(self, sample_rate: int, channels: int = 2, cutoff: float = 5.0) -> None:
         self._blocker = DCBlocker(sample_rate, channels=channels, cutoff=cutoff)

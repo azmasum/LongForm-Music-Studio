@@ -152,6 +152,10 @@ class GenerationParameters:
     drum_style: str = ""
     crowd_chant: bool = False
     exclude_vocals: bool = False
+    drop_intensity: float = 50.0
+    bass_distortion: float = 0.0
+    supersaw_brightness: float = 50.0
+    sidechain_amount: float = 100.0
 
     def validate(self) -> None:
         if self.genre not in _GENRE_PROFILES:
@@ -177,6 +181,15 @@ class GenerationParameters:
             raise ValidationError(f"unsupported sample_rate {self.sample_rate}")
         if not 0.0 <= float(self.drum_energy) <= 100.0:
             raise ValidationError("drum_energy must be within [0, 100]")
+        for name in (
+            "drop_intensity",
+            "bass_distortion",
+            "supersaw_brightness",
+            "sidechain_amount",
+        ):
+            value = float(getattr(self, name))
+            if not 0.0 <= value <= 100.0:
+                raise ValidationError(f"{name} must be within [0, 100]")
         if self.energy_curve is not None:
             from lfms.arranger.energy import known_energy_presets
 
@@ -216,6 +229,10 @@ class MusicPlan:
     sample_rate: int = DEFAULT_SAMPLE_RATE
     voiceover_safe: bool = False
     crowd_chant: bool = False
+    drop_intensity: float = 50.0
+    bass_distortion: float = 0.0
+    supersaw_brightness: float = 50.0
+    sidechain_amount: float = 100.0
     fingerprint: str = field(default="")
 
     @property
@@ -342,6 +359,10 @@ def build_plan(params: GenerationParameters) -> MusicPlan:
         sample_rate=int(params.sample_rate),
         voiceover_safe=bool(params.voiceover_safe),
         crowd_chant=bool(params.crowd_chant),
+        drop_intensity=float(params.drop_intensity),
+        bass_distortion=float(params.bass_distortion),
+        supersaw_brightness=float(params.supersaw_brightness),
+        sidechain_amount=float(params.sidechain_amount),
         fingerprint=plan_fingerprint,
     )
 
