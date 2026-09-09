@@ -4,6 +4,24 @@ All notable changes are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: semver.
 ## [Unreleased]
 
+### Fixed
+
+### 1.4.1 — In-the-middle piercing squeaks removed
+
+Meditation/relaxation/ambient tracks (and any arrangement using plucks or
+bells) occasionally threw a sharp, piercing transient on top of the quiet
+bed — an unfiltered Karplus-Strong noise snap and FM bell sidebands — which
+annoyed on repeated listens.
+
+- **Nylon pluck (Karplus-Strong)** now passes through a gentle 6.5 kHz
+  lowpass, taming the raw white-noise excitation snap (measured 6-12 kHz
+  transient energy cut ~60%) while keeping the plucked body and decay intact.
+- **FM bell** has its modulator strength eased (index 2.2 → 1.7) and its
+  output rolled off above 4.8 kHz, so high sparkle bells shimmer instead of
+  squeak over a quiet meditation bed.
+- Regression test asserts the >6 kHz energy fraction of both voices stays
+  far below the raw-excitation levels.
+
 ### Added
 
 ### 1.4.0 — Creator workflow pack (2026-09)

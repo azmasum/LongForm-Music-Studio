@@ -35,6 +35,41 @@ def test_limiter_state_smooth_across_blocks() -> None:
     assert limiter._gain > 0.05
 
 
+def _voice_hf_fraction(
+    instrument: str, *, midi: int, velocity: float = 90.0,
+    sample_rate: int = 48000, above_hz: float = 6000.0,
+) -> float:
+    """Fraction of a note's energy above ``above_hz`` (0..1)."""
+    from lfms.generator.events import NoteEvent
+    from lfms.generator.voices import make_voice
+
+    note = NoteEvent(
+        start_sec=0.0, duration_sec=0.6, midi=midi, velocity=velocity,
+        role="TEST", instrument=instrument,
+    )
+    voice = make_voice(instrument, sample_rate, note, {}, rng_seed=7)
+    chunks: list[np.ndarray] = []
+    while not voice.finished and len(chunks) < 300:
+        chunk = voice.process(2048)
+        chunks.append(chunk)
+        if float(np.max(np.abs(chunk))) < 1e-6 and len(chunks) > 4:
+            break
+    signal = np.concatenate(chunks).astype(np.float64)
+    signal = signal - signal.mean()
+    spectrum = np.abs(np.fft.rfft(signal * np.hanning(len(signal)))) ** 2
+    freqs = np.fft.rfftfreq(len(signal), 1.0 / sample_rate)
+    return float(spectrum[freqs >= above_hz].sum() / spectrum.sum())
+
+
+@pytest.mark.parametrize("instrument,midi,limit", [
+    ("NYLON", 60, 0.35),  # raw KS excitation is ~0.73; lowpass tame keeps it low
+    ("BELL", 84, 0.35),   # FM sidebands topped-off so high bells don't squeak
+])
+def test_pluck_and_bell_transients_stay_top_end_tamed(instrument, midi, limit) -> None:
+    frac = _voice_hf_fraction(instrument, midi=midi)
+    assert frac < limit
+
+
 def _render(params_kwargs: dict, tmp_path, name: str):
     from lfms.generator.composer import Composer
     from lfms.generator.plan import GenerationParameters

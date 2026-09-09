@@ -151,11 +151,20 @@ class BellVoice(VoiceBase):
             wave="SINE",
             frequency=midi_to_freq(self.note.midi),
             fm_ratio=3.5,
-            fm_index=2.2,
+            fm_index=1.7,
+        )
+        # FM sidebands climb bright and fast; a gentle top-end tame keeps the
+        # bell's fundamental and shimmer but stops it squeaking over a quiet
+        # meditation/ambient bed.
+        self.tame = BiquadFilter(
+            self.sample_rate, kind="lowpass", cutoff=4800.0, q=0.6
         )
 
     def _osc(self, n: int) -> np.ndarray:
         return self.osc.process(n)
+
+    def _shape(self, signal: np.ndarray) -> np.ndarray:
+        return self.tame.process(signal)
 
 
 class PianoVoice(VoiceBase):
@@ -459,6 +468,13 @@ class NylonVoice(VoiceBase):
         peak = float(np.max(np.abs(out))) or 1.0
         self._cache = out / peak
         self._cursor = 0
+        # The raw Karplus-Strong excitation is wideband white noise; without a
+        # top-end rolloff each pluck starts with a harsh, piercing snap on a
+        # quiet pad bed. A gentle lowpass tames the squeak while the plucked
+        # body and decay harmonics stay intact.
+        self.tame = BiquadFilter(
+            self.sample_rate, kind="lowpass", cutoff=6500.0, q=0.6
+        )
 
     def _osc(self, n: int) -> np.ndarray:
         end = min(self._cursor + int(n), len(self._cache))
@@ -467,6 +483,9 @@ class NylonVoice(VoiceBase):
         if len(piece) < int(n):
             piece = np.pad(piece, (0, int(n) - len(piece)))
         return piece.astype(np.float64)
+
+    def _shape(self, signal: np.ndarray) -> np.ndarray:
+        return self.tame.process(signal)
 
 
 class SawBassVoice(VoiceBase):
