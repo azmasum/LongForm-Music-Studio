@@ -2,10 +2,39 @@
 
 All notable changes are documented here. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: semver.
-
 ## [Unreleased]
 
 ### Added
+
+### 1.4.0 — Creator workflow pack (2026-09)
+
+Six user-facing improvements across the library, timeline, mix and export
+surfaces, delivered one feature at a time:
+
+- **Library audio preview** — select any item and press **Play preview** in
+  the Library page to audition the audio from the timeline transport (with
+  waveform read via `soundfile`, safe for generated and long recordings).
+- **Timeline waveform visualization** — rendered clips and imported audio now
+  paint a cached per-clip peak waveform inside their track lanes, so you can
+  see phrasing, hits and energy at a glance.
+- **Remix / Variation** — a new **Remix / Variation** button on any library
+  item re-creates the piece from its stored style with a different seed, or
+  references imported audio for a fresh variation ("… (remix)" titles).
+  Full generation parameters are now archived on every composition.
+- **Voiceover sidechain ducking** — a new sidechain section on the Mix page
+  turns on automatic music ducking under VO tracks: threshold, max reduction,
+  range, attack and release are undoable (Ctrl+Z), are saved in the project,
+  and apply to mixdown renders (per-track volume/pan/FX preserved).
+- **ID3 metadata + cover art** — MP3 deliverables now embed a dependency-free
+  ID3v2.3 tag (title, artist, album, genre, year, comment) plus generated,
+  deterministic cover art PNG (APIC frame). Toggle off via the Export page;
+  `artist:`/`album:` library tags are honoured.
+- **Timeline editor improvements** — arrow-key nudging, grid snapping for
+  drags/splits/pastes/nudges (B key or toolbar toggle, 0.5 s grid), and a
+  live playhead cursor synced to transport playback.
+
+### Added
+
 - **User-tunable EDM/festival style controls (v1.3.4)** — four new sliders in
   the Generate page's Advanced settings panel, each flowing into the renderer:
   - **Drop intensity** — boosts the super-saw lead gain around the drop so it

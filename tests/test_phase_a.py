@@ -272,3 +272,89 @@ def test_render_mixdown_produces_file(tmp_path):
     assert out.paths[0].exists()
     info = sf.info(str(out.paths[0]))
     assert info.duration > 1.0
+
+
+def test_mixdown_ducking_reduces_music_between_voiceover(tmp_path):
+    from lfms.library.service import LibraryService
+    from lfms.studio import render_project_mixdown
+    from lfms.timeline.model import Clip, TimelineDocument, TrackState
+
+    sr = 48000
+    t = np.arange(int(sr * 2.0)) / sr
+    sf.write(
+        str(tmp_path / "bed.wav"),
+        (0.5 * np.sin(2 * np.pi * 200 * t)).astype(np.float32),
+        sr, subtype="PCM_16",
+    )
+    vo = np.zeros(int(sr * 2.0), dtype=np.float32)
+    vo[int(0.5 * sr):int(1.5 * sr)] = 0.6 * np.sin(2 * np.pi * 1000 * t[int(0.5 * sr):int(1.5 * sr)])
+    sf.write(str(tmp_path / "vo.wav"), vo.astype(np.float32), sr, subtype="PCM_16")
+
+    lib = LibraryService(":memory:")
+    doc = TimelineDocument(duration_sec=10.0)
+    music_tr = doc.add_track(TrackState(name="Music"))
+    vo_tr = doc.add_track(TrackState(name="VO", kind="VOICEOVER"))
+    doc.add_clip(Clip(track_id=music_tr.track_id, start_sec=0.0, duration_sec=2.0,
+                      source_kind="AUDIO_FILE", source_ref=str(tmp_path / "bed.wav")))
+    doc.add_clip(Clip(track_id=vo_tr.track_id, start_sec=0.5, duration_sec=1.0,
+                      source_kind="AUDIO_FILE", source_ref=str(tmp_path / "vo.wav")))
+
+    out_dry = render_project_mixdown(
+        doc, lib, tmp_path / "dry", preset=None, filename="dry",
+        ducking={"enabled": False, "threshold_db": -40.0, "floor_db": -18.0,
+                 "attack_ms": 5.0, "range_db": 6.0},
+    )
+    out_duck = render_project_mixdown(
+        doc, lib, tmp_path / "duck", preset=None, filename="duck",
+        ducking={"enabled": True, "threshold_db": -40.0, "floor_db": -18.0,
+                 "attack_ms": 5.0, "range_db": 6.0},
+    )
+    dry, _ = sf.read(str(out_dry.paths[0]), always_2d=True, dtype="float32")
+    duck, _ = sf.read(str(out_duck.paths[0]), always_2d=True, dtype="float32")
+
+    def bed_energy(data, seg):
+        mono = data[:, 0][seg].astype(np.float64)
+        from lfms.audio_engine.dsp import band_energy
+        return band_energy(mono, sr, 150, 250)
+
+    during = slice(int(0.85 * sr), int(1.4 * sr))
+    duck_quiet = bed_energy(duck, during)
+    dry_quiet = bed_energy(dry, during)
+    assert dry_quiet > 0.0
+    assert duck_quiet < dry_quiet * 0.5
+
+
+def test_build_project_graph_ducker_requires_enabled_vo_clips(tmp_path):
+    from lfms.library.service import LibraryService
+    from lfms.studio.project import build_project_graph
+    from lfms.timeline.model import Clip, TimelineDocument, TrackState
+
+    sr = 48000
+    t = np.arange(sr, dtype=np.float64) / sr
+    sf.write(str(tmp_path / "tone.wav"),
+             (0.4 * np.sin(2 * np.pi * 300 * t)).astype(np.float32), sr,
+             subtype="PCM_16")
+    lib = LibraryService(":memory:")
+    doc = TimelineDocument(duration_sec=5.0)
+    mtr = doc.add_track(TrackState(name="Music"))
+    doc.add_clip(Clip(track_id=mtr.track_id, start_sec=0.0, duration_sec=1.0,
+                      source_kind="AUDIO_FILE", source_ref=str(tmp_path / "tone.wav")))
+    ducking = {"enabled": True, "threshold_db": -30.0, "floor_db": -10.0}
+
+    # no VO track -> no ducker
+    graph = build_project_graph(doc, lib, ducking=ducking)
+    assert graph.mixer.ducker is None
+    assert graph.mixer.strips[0].kind == "MUSIC"
+
+    # VO track present + enabled -> ducker attaches and strips keep kind
+    vtr = doc.add_track(TrackState(name="VO", kind="VOICEOVER"))
+    doc.add_clip(Clip(track_id=vtr.track_id, start_sec=0.2, duration_sec=0.8,
+                      source_kind="AUDIO_FILE", source_ref=str(tmp_path / "tone.wav")))
+    graph = build_project_graph(doc, lib, ducking=ducking)
+    assert graph.mixer.ducker is not None
+    kinds = {s.kind for s in graph.mixer.strips}
+    assert kinds == {"MUSIC", "VOICEOVER"}
+
+    # disabled -> no ducker even with VO clip
+    graph = build_project_graph(doc, lib, ducking={"enabled": False})
+    assert graph.mixer.ducker is None

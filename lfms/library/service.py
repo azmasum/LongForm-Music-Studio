@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import functools
 import json
+import random
 import sqlite3
 import threading
+from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -18,6 +20,7 @@ import numpy as np
 import soundfile as sf
 
 from lfms.core.errors import ValidationError
+from lfms.generator.plan import params_from_payload
 from lfms.library.models import Item
 from lfms.mastering.measure import measure
 
@@ -126,6 +129,52 @@ def smart_tags_for_measurement(
     elif duration_sec <= 30.0:
         tags.append("sting")
     return tuple(tags)
+
+
+_MAX_SEED = 2_147_483_647
+
+
+def remix_params_from_item(
+    item: Item,
+    *,
+    rng: random.Random | None = None,
+) -> object:
+    """Recover the generation parameters behind a stored generated item and
+    return a *new* variation: same style, fresh seed.
+
+    If ``params_json`` is missing or unparseable, parameters are recovered
+    from the item fields (duration, genre tag, seed) with sensible defaults.
+    """
+    payload: dict = {}
+    if item.params_json:
+        try:
+            payload = json.loads(item.params_json)
+        except json.JSONDecodeError:
+            payload = {}
+    if not payload.get("genre"):
+        payload["genre"] = "AMBIENT"
+        for tag in item.tags:
+            if tag.startswith("genre:"):
+                payload["genre"] = tag.split(":", 1)[1].upper()
+                break
+    payload.setdefault("duration_sec", item.duration_sec or 1800.0)
+    payload.setdefault("moods", ("NEUTRAL",))
+    payload.setdefault("intensity", 50.0)
+    if "moods" in payload and isinstance(payload["moods"], (tuple, list)):
+        payload["moods"] = tuple(str(m) for m in payload["moods"])
+    elif "moods" in payload:
+        payload["moods"] = (str(payload["moods"]),)
+    if payload.get("energy_points"):
+        payload["energy_points"] = tuple(
+            tuple(float(pt) for pt in point) for point in payload["energy_points"]
+        )
+    rng = rng or random.Random()
+    original_seed = int(payload.get("seed") or item.seed or 1)
+    new_seed = original_seed
+    while new_seed == original_seed:
+        new_seed = rng.randrange(1, _MAX_SEED)
+    payload["seed"] = new_seed
+    return params_from_payload(payload)
 
 
 class LibraryService:
@@ -261,16 +310,10 @@ class LibraryService:
         extra_tags: tuple[str, ...] = (),
     ) -> Item:
         """Store a generated composition with its parameters and smart tags."""
-        params_json = json.dumps(
-            {
-                "seed": params.seed,
-                "duration_sec": params.duration_sec,
-                "genre": str(params.genre),
-                "moods": [str(m) for m in params.moods],
-                "intensity": params.intensity,
-                "voiceover_safe": bool(params.voiceover_safe),
-            }
-        )
+        data = asdict(params)
+        data["genre"] = str(data["genre"])
+        data["moods"] = [str(m) for m in data["moods"]]
+        params_json = json.dumps(data)
         display = title or f"{str(params.genre).title()} {composition.fingerprint}"
         item = self.add_item(
             display,

@@ -121,6 +121,7 @@ def test_remove_automation_point_missing_raises():
 
 def test_serialization_roundtrip_preserves_document():
     doc = TimelineDocument(title="Demo", duration_sec=300.0)
+    doc.ducking.update({"enabled": True, "threshold_db": -30.0, "attack_ms": 15.0, "range_db": 9.0})
     track_a = doc.add_track(_track("Music A"))
     track_b = doc.add_track(_track("Ambience", kind="AMBIENCE", volume_db=-6.0))
     doc.add_clip(Clip(track_a.track_id, start_sec=0.0, duration_sec=120.0, label="Theme"))
@@ -146,3 +147,25 @@ def test_serialization_roundtrip_preserves_document():
     assert restored.markers[0].label == "Chapter 2"
     points = restored.lanes[0].points
     assert isinstance(points[0], AutomationPoint)
+    assert restored.ducking == {
+        "enabled": True,
+        "threshold_db": -30.0,
+        "attack_ms": 15.0,
+        "range_db": 9.0,
+        "floor_db": -12.0,
+        "release_ms": 600.0,
+    }
+
+
+def test_ducking_defaults_on_new_document():
+    doc = TimelineDocument()
+    assert doc.ducking == {
+        "enabled": False,
+        "threshold_db": -38.0,
+        "floor_db": -12.0,
+        "attack_ms": 40.0,
+        "release_ms": 600.0,
+        "range_db": 18.0,
+    }
+    restored = TimelineDocument.from_dict({})
+    assert restored.ducking == doc.ducking

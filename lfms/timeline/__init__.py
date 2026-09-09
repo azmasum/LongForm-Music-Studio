@@ -15,6 +15,7 @@ from lfms.timeline.commands import (
     ResizeClipCommand,
     SetAutomationPointCommand,
     SetClipPropertyCommand,
+    SetDuckingCommand,
     SetTrackPropertyCommand,
     SplitClipCommand,
 )
@@ -51,6 +52,7 @@ __all__ = [
     "ResizeClipCommand",
     "SetAutomationPointCommand",
     "SetClipPropertyCommand",
+    "SetDuckingCommand",
     "SetTrackPropertyCommand",
     "SplitClipCommand",
     "TimelineDocument",

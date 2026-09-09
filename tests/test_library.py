@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import random
 from pathlib import Path
 
 import numpy as np
@@ -16,6 +17,7 @@ from lfms.library import (
     LibraryService,
     humanized_stem,
     normalize_tag,
+    remix_params_from_item,
     smart_tags_for_generation,
 )
 
@@ -90,6 +92,96 @@ def test_register_composition_with_smart_tags(lib):
     assert any(t.startswith("bpm:") for t in tags)
     payload = json.loads(item.params_json)
     assert payload["seed"] == 42
+
+
+def test_register_composition_stores_full_parameters(lib):
+    params = GenerationParameters(
+        seed=7,
+        duration_sec=20.0,
+        genre="ELECTRONIC",
+        moods=("ENERGETIC",),
+        intensity=80.0,
+        bpm=128,
+        key_root="F",
+        key_mode="MINOR",
+        energy_curve="INTRO_PEAK_OUTRO",
+        drums=True,
+        drum_energy=62.0,
+        drum_style="four_on_floor",
+        crowd_chant=True,
+        drop_intensity=70.0,
+        bass_distortion=35.0,
+        supersaw_brightness=65.0,
+        sidechain_amount=90.0,
+        voiceover_safe=False,
+    )
+    params.validate()
+    composition = Composer(params).compose()
+    item = lib.register_composition(composition, params)
+    payload = json.loads(item.params_json)
+    assert payload["bpm"] == 128
+    assert payload["key_root"] == "F"
+    assert payload["key_mode"] == "MINOR"
+    assert payload["energy_curve"] == "INTRO_PEAK_OUTRO"
+    assert payload["drums"] is True
+    assert payload["drop_intensity"] == 70.0
+    assert payload["bass_distortion"] == 35.0
+    assert payload["supersaw_brightness"] == 65.0
+    assert payload["sidechain_amount"] == 90.0
+    assert payload["moods"] == ["ENERGETIC"]
+
+
+def test_remix_params_from_item_recovers_style_and_fresh_seed(lib):
+    params = GenerationParameters(
+        seed=42,
+        duration_sec=25.0,
+        genre="ELECTRONIC",
+        moods=("ENERGETIC",),
+        intensity=75.0,
+        bpm=128,
+        key_root="F",
+        key_mode="MINOR",
+        energy_curve="INTRO_PEAK_OUTRO",
+        drums=True,
+    )
+    params.validate()
+    composition = Composer(params).compose()
+    item = lib.register_composition(composition, params)
+
+    remix = remix_params_from_item(item, rng=random.Random(1234))
+    assert remix.genre == "ELECTRONIC"
+    assert remix.moods == ("ENERGETIC",)
+    assert remix.intensity == 75.0
+    assert remix.bpm == 128
+    assert remix.key_root == "F"
+    assert remix.key_mode == "MINOR"
+    assert remix.energy_curve == "INTRO_PEAK_OUTRO"
+    assert remix.drums is True
+    assert remix.duration_sec == 25.0
+    assert remix.seed != 42
+    assert remix.seed > 0
+
+
+def test_remix_params_fallback_without_params_json(lib):
+    item = lib.add_item("Lost params", kind="GENERATED", duration_sec=15.0)
+    remix = remix_params_from_item(item, rng=random.Random(99))
+    assert remix.duration_sec == 15.0
+    assert remix.seed > 0
+
+
+def test_remix_params_always_different_seed(lib):
+    params = GenerationParameters(
+        seed=5,
+        duration_sec=10.0,
+        genre="AMBIENT",
+        moods=("NEUTRAL",),
+    )
+    params.validate()
+    composition = Composer(params).compose()
+    item = lib.register_composition(composition, params)
+
+    remix = remix_params_from_item(item, rng=random.Random(1))
+    assert remix.seed != 5
 
 
 def test_import_audio_file_measures_and_tags(lib, tmp_path: Path):

@@ -20,12 +20,14 @@ class TrackStrip:
         volume_db: float = 0.0,
         pan: float = 0.0,
         effects: list[Effect] | None = None,
+        kind: str = "MUSIC",
     ) -> None:
         self.name = name
         self.source = source
         self.volume_db = float(volume_db)
         self.pan = max(-1.0, min(1.0, float(pan)))
         self.effects: list[Effect] = list(effects or [])
+        self.kind = kind
         self.mute = False
         self.solo = False
         # Optional automation: callable(start_frame, n_frames) -> (n,) gain
@@ -51,7 +53,11 @@ class TrackStrip:
 
 
 class Mixer:
-    """Sums active strips into a stereo (or mono-folded) master bus."""
+    """Sums active strips into a stereo (or mono-folded) master bus.
+
+    When a :class:`SidechainDucker` is attached, strips whose ``kind`` equals
+    ``duck_kind`` (voiceover) drive ducking of every other strip.
+    """
 
     def __init__(self, *, master_volume_db: float = 0.0, channels: int = 2) -> None:
         if channels not in (1, 2):
@@ -60,6 +66,8 @@ class Mixer:
         self.master_effects: list[Effect] = []
         self.master_volume_db = float(master_volume_db)
         self.channels = channels
+        self.ducker = None
+        self.duck_kind = "VOICEOVER"
 
     def add_strip(self, strip: TrackStrip) -> TrackStrip:
         self.strips.append(strip)
@@ -73,10 +81,7 @@ class Mixer:
             if not s.mute and (s.solo if any_solo else True)
         ]
 
-    def process(self, ctx: RenderContext, n_frames: int) -> np.ndarray:
-        bus = np.zeros((2, n_frames), dtype=np.float64)
-        for strip in self._active_strips():
-            bus += strip.process(ctx, n_frames).astype(np.float64)
+    def _finalize(self, bus: np.ndarray) -> np.ndarray:
         for effect in self.master_effects:
             bus = effect.process(bus.astype(np.float32)).astype(np.float64)
         bus *= db_to_gain(self.master_volume_db)
@@ -84,6 +89,25 @@ class Mixer:
             mono = np.mean(bus, axis=0, keepdims=True)
             return mono.astype(np.float32)
         return bus.astype(np.float32)
+
+    def process(self, ctx: RenderContext, n_frames: int) -> np.ndarray:
+        bus = np.zeros((2, n_frames), dtype=np.float64)
+        for strip in self._active_strips():
+            bus += strip.process(ctx, n_frames).astype(np.float64)
+        return self._finalize(bus)
+
+    def process_ducked(self, ctx: RenderContext, n_frames: int) -> np.ndarray:
+        vo = np.zeros((2, n_frames), dtype=np.float64)
+        music = np.zeros((2, n_frames), dtype=np.float64)
+        for strip in self._active_strips():
+            block = strip.process(ctx, n_frames).astype(np.float64)
+            if strip.kind == self.duck_kind:
+                vo += block
+            else:
+                music += block
+        curve = self.ducker.gain_curve_for(n_frames, vo.astype(np.float32))
+        bus = music * curve.astype(np.float64)[None, :] + vo
+        return self._finalize(bus)
 
 
 class AudioGraph:
@@ -105,13 +129,18 @@ class AudioGraph:
         volume_db: float = 0.0,
         pan: float = 0.0,
         effects: list[Effect] | None = None,
+        kind: str = "MUSIC",
     ) -> TrackStrip:
         if source.sample_rate != self.sample_rate:
             raise ValueError(
                 f"source sample rate {source.sample_rate} differs from graph {self.sample_rate}"
             )
-        strip = TrackStrip(name, source, volume_db=volume_db, pan=pan, effects=effects)
+        strip = TrackStrip(
+            name, source, volume_db=volume_db, pan=pan, effects=effects, kind=kind
+        )
         return self.mixer.add_strip(strip)
 
     def process(self, ctx: RenderContext, n_frames: int) -> np.ndarray:
+        if self.mixer.ducker is not None:
+            return self.mixer.process_ducked(ctx, n_frames)
         return self.mixer.process(ctx, n_frames)

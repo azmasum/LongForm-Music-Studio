@@ -69,6 +69,7 @@ from lfms.timeline import (
     MoveClipCommand,
     RemoveClipCommand,
     SetClipPropertyCommand,
+    SetDuckingCommand,
     SetTrackPropertyCommand,
     SplitClipCommand,
     TimelineDocument,
@@ -144,6 +145,7 @@ class TimelineCanvas(QWidget):
     duplicate_requested = Signal(str)    # clip_id
     copy_requested = Signal(str)         # clip_id
     paste_requested = Signal(str, float)  # source_clip_id, suggested_start
+    snap_changed = Signal(bool, float)   # enabled, step_sec
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -154,9 +156,32 @@ class TimelineCanvas(QWidget):
         self._drag_offset_sec = 0.0
         self._drag_preview_start: float | None = None
         self._copied_clip_id: str | None = None
+        self._clip_waveform_cache: dict[str, list[float]] = {}
+        self._clip_waveform_missing: set[str] = set()
+        self.audio_path_resolver: object = None
+        self.playhead_sec: float | None = None
+        self.snap_enabled = True
+        self.snap_step_sec = 0.5
         self.setMinimumHeight(240)
         self.setFocusPolicy(Qt.StrongFocus)
         self.setMouseTracking(False)
+
+    def snap_time(self, sec: float) -> float:
+        """Round *sec* to the snap grid (identity when snapping is off)."""
+        if not self.snap_enabled:
+            return float(sec)
+        step = max(0.01, float(self.snap_step_sec))
+        return max(0.0, round(float(sec) / step) * step)
+
+    def set_snap(self, enabled: bool, step_sec: float | None = None) -> None:
+        self.snap_enabled = bool(enabled)
+        if step_sec is not None:
+            self.snap_step_sec = max(0.01, float(step_sec))
+        self.snap_changed.emit(self.snap_enabled, self.snap_step_sec)
+        self.update()
+
+    def _nudge_step(self) -> float:
+        return self.snap_step_sec if self.snap_enabled else 0.25
 
     def set_document(self, document: TimelineDocument) -> None:
         self.document = document
@@ -243,7 +268,7 @@ class TimelineCanvas(QWidget):
             (event.position().x() / scale) - self._drag_offset_sec,
         )
         limit = max(0.0, self.document.duration_sec)
-        self._drag_preview_start = min(new_start, limit)
+        self._drag_preview_start = self.snap_time(min(new_start, limit))
         self.update()
 
     def mouseReleaseEvent(self, event) -> None:  # noqa: N802 (Qt naming)
@@ -280,8 +305,23 @@ class TimelineCanvas(QWidget):
             self.selection_changed.emit(None)
             self.update()
             return
-        if key == Qt.Key_S:  # split at cursor
-            t = self._hover_time()
+        if key == Qt.Key_B:  # toggle snap-to-grid
+            self.set_snap(not self.snap_enabled)
+            return
+        if key == Qt.Key_Left:
+            step = self._nudge_step()
+            new_start = self.snap_time(clip.start_sec - step)
+            if new_start != clip.start_sec:
+                self.clip_moved.emit(clip.clip_id, new_start)
+            return
+        if key == Qt.Key_Right:
+            step = self._nudge_step()
+            new_start = self.snap_time(clip.start_sec + step)
+            if new_start != clip.start_sec:
+                self.clip_moved.emit(clip.clip_id, new_start)
+            return
+        if key == Qt.Key_S:  # split at cursor (snapped to grid)
+            t = self.snap_time(self._hover_time())
             if clip.start_sec < t < clip.end_sec:
                 self.split_requested.emit(clip.clip_id, round(t, 3))
                 self.selected_clip_id = None
@@ -299,9 +339,51 @@ class TimelineCanvas(QWidget):
                 src = self.document.clip(self._copied_clip_id)
             except Exception:
                 return
-            self.paste_requested.emit(self._copied_clip_id, src.end_sec + 0.01)
+            gap = self.snap_step_sec if self.snap_enabled else 0.01
+            self.paste_requested.emit(self._copied_clip_id, src.end_sec + gap)
             return
         super().keyPressEvent(event)
+
+    def _ensure_waveform(self, clip: Clip) -> list[float] | None:
+        if clip.clip_id in self._clip_waveform_cache:
+            return self._clip_waveform_cache[clip.clip_id]
+        if clip.clip_id in self._clip_waveform_missing:
+            return None
+        path_str: str | None = None
+        if self.audio_path_resolver is not None:
+            try:
+                path_str = self.audio_path_resolver(clip)
+            except Exception:
+                path_str = None
+        if not path_str:
+            self._clip_waveform_missing.add(clip.clip_id)
+            return None
+        p = Path(str(path_str))
+        if not p.is_file():
+            self._clip_waveform_missing.add(clip.clip_id)
+            return None
+        try:
+            import soundfile as sf  # noqa: E402
+
+            info = sf.info(str(p))
+            total_frames = info.frames
+            n_peaks = min(total_frames, 2000)
+            chunk_size = max(1, total_frames // n_peaks)
+            peaks: list[float] = []
+            for i, block in enumerate(
+                sf.blocks(str(p), blocksize=chunk_size, dtype="float32")
+            ):
+                if i >= n_peaks:
+                    break
+                import numpy as np  # noqa: E402
+
+                arr = block.mean(axis=1) if block.ndim > 1 else block
+                peaks.append(float(np.max(np.abs(arr))))
+        except Exception:
+            self._clip_waveform_missing.add(clip.clip_id)
+            return None
+        self._clip_waveform_cache[clip.clip_id] = peaks
+        return peaks
 
     # ------------------------------------------------------------ drawing
 
@@ -362,12 +444,45 @@ class TimelineCanvas(QWidget):
                 else:
                     painter.setPen(QPen(QColor(BORDER)))
                 painter.drawRoundedRect(int(x0) + 1, rect_y, rect_w, self.LANE_HEIGHT - 20, 5, 5)
+                peaks = self._ensure_waveform(clip)
+                if peaks:
+                    import numpy as np  # noqa: E402
+
+                    n_cols = max(1, rect_w)
+                    idx = np.linspace(0, len(peaks) - 1, n_cols)
+                    sampled = np.interp(idx, np.arange(len(peaks)), peaks)
+                    mx = float(np.max(sampled)) if float(np.max(sampled)) > 0 else 1.0
+                    norm = sampled / mx
+                    mid_y = rect_y + (self.LANE_HEIGHT - 20) // 2
+                    wf_color = QColor("#ffffff")
+                    wf_color.setAlpha(90)
+                    painter.setPen(QPen(wf_color, 1))
+                    rect_x_start = int(x0) + 1
+                    for col, val in enumerate(norm):
+                        half = int(val * (self.LANE_HEIGHT - 20) * 0.42)
+                        cx = rect_x_start + col
+                        painter.drawLine(cx, mid_y - half, cx, mid_y + half)
                 if rect_w > 40:
                     painter.drawText(
                         int(x0) + 6,
                         rect_y + self.LANE_HEIGHT - 24,
                         (clip.label or clip.clip_id)[: rect_w // 8],
                     )
+
+        # playhead cursor (synced to transport)
+        if self.playhead_sec is not None and 0.0 <= self.playhead_sec <= document.duration_sec:
+            px = origin_x + self.playhead_sec * scale
+            painter.setPen(QPen(QColor("#ff6b6b"), 2))
+            painter.drawLine(int(px), self.RULER_HEIGHT, int(px), self.height() - 8)
+
+        # snap indicator chip
+        chip = f"SNAP {self.snap_step_sec:.2f}s" if self.snap_enabled else "SNAP OFF"
+        chip_rect = (int(origin_x) + width - 112, 2, 104, 18)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor("#2b2333"))
+        painter.drawRoundedRect(*chip_rect, 4, 4)
+        painter.setPen(QPen(QColor("#e0af68")))
+        painter.drawText(*chip_rect, Qt.AlignCenter, chip)
 
 
 class GeneratePage(QWidget):
@@ -995,6 +1110,9 @@ class BatchPage(QWidget):
 class LibraryPage(QWidget):
     """Browser for the SQLite sound library with search/filter/collections."""
 
+    preview_requested = Signal(int)
+    remix_requested = Signal(int)
+
     def __init__(self, library: LibraryService, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.library = library
@@ -1032,11 +1150,15 @@ class LibraryPage(QWidget):
         outer.addWidget(self.details)
 
         buttons = QHBoxLayout()
+        self.play_button = QPushButton("Play preview")
+        self.remix_button = QPushButton("Remix / Variation")
         self.favorite_button = QPushButton("Favorite")
         self.delete_button = QPushButton("Delete")
         self.to_collection_button = QPushButton("Add to collection…")
         self.new_collection_button = QPushButton("New collection…")
         for btn in (
+            self.play_button,
+            self.remix_button,
             self.favorite_button,
             self.delete_button,
             self.to_collection_button,
@@ -1046,6 +1168,10 @@ class LibraryPage(QWidget):
         buttons.addStretch(1)
         outer.addLayout(buttons)
 
+        self.play_button.clicked.connect(self._play_selected)
+        self.play_button.setEnabled(False)
+        self.remix_button.setEnabled(False)
+        self.remix_button.clicked.connect(self._remix_selected)
         self.favorite_button.clicked.connect(self._toggle_favorite)
         self.delete_button.clicked.connect(self._delete_selected)
         self.to_collection_button.clicked.connect(self._add_to_collection)
@@ -1113,6 +1239,10 @@ class LibraryPage(QWidget):
         item = self._selected()
         if item is None:
             return
+        self.play_button.setEnabled(bool(item.path))
+        self.remix_button.setEnabled(
+            item.kind == "GENERATED" or bool(item.path)
+        )
         lines = [f"<b>{item.title}</b> ({humanize(item.kind)})"]
         if item.path:
             lines.append(f"File: {item.path}")
@@ -1141,6 +1271,20 @@ class LibraryPage(QWidget):
         if item.notes:
             lines.append(f"Notes: {item.notes}")
         self.details.setHtml("<br/>".join(lines))
+
+    def _play_selected(self) -> None:
+        item = self._selected()
+        if item is None or not item.path:
+            self.play_button.setEnabled(False)
+            return
+        self.preview_requested.emit(item.id)
+
+    def _remix_selected(self) -> None:
+        item = self._selected()
+        if item is None or item.kind != "GENERATED" and not item.path:
+            self.remix_button.setEnabled(False)
+            return
+        self.remix_requested.emit(item.id)
 
     def _toggle_favorite(self) -> None:
         item = self._selected()
@@ -1198,11 +1342,12 @@ class MixPage(QWidget):
     """Per-track channel strips (volume/pan/mute/solo) for the timeline.
 
     Edits emit ``property_changed`` so MainWindow can apply them as
-    undoable ``SetTrackPropertyCommand``s. Effect chains and ducking UI
-    stay deferred (documented in docs/MIXER.md).
+    undoable ``SetTrackPropertyCommand``s. Sidechain ducking for the
+    voiceover bus is edited here too (``ducking_field_changed``).
     """
 
     property_changed = Signal(str, str, object)
+    ducking_field_changed = Signal(str, object)
     mixdown_requested = Signal(str)
     stems_requested = Signal()
     track_selected = Signal(str)
@@ -1235,6 +1380,44 @@ class MixPage(QWidget):
         self._fx_rack = FxRackWidget()
         outer.addWidget(self._fx_rack)
         outer.addSpacing(10)
+        # voiceover sidechain ducking
+        self._ducking_box = QGroupBox("Voiceover sidechain ducking")
+        duck_lay = QVBoxLayout(self._ducking_box)
+        duck_lay.setSpacing(6)
+        self._duck_enabled = QCheckBox(
+            "Enable: background music ducks while voiceover is active"
+        )
+        duck_lay.addWidget(self._duck_enabled)
+        self._duck_widgets: dict[str, QSlider] = {}
+        for label_text, field, lo, hi, default, fmt, suf in (
+            ("Threshold", "threshold_db", -80, 0, -38, "{:.0f}", " dB"),
+            ("Max reduction", "floor_db", -48, 0, -12, "{:.0f}", " dB"),
+            ("Range", "range_db", 3, 60, 18, "{:.0f}", " dB"),
+            ("Attack", "attack_ms", 1, 500, 40, "{:.0f}", " ms"),
+            ("Release", "release_ms", 10, 5000, 600, "{:.0f}", " ms"),
+        ):
+            row = QHBoxLayout()
+            row.addWidget(QLabel(label_text))
+            slider = QSlider(Qt.Horizontal)
+            slider.setRange(lo, hi)
+            slider.setValue(default)
+            value_label = QLabel(fmt.format(default) + suf)
+            row.addWidget(slider, stretch=1)
+            row.addWidget(value_label)
+            duck_lay.addLayout(row)
+            slider.valueChanged.connect(
+                lambda v, f=field, lab=value_label, frmt=fmt, us=suf: (
+                    lab.setText(frmt.format(v) + us),
+                    self.ducking_field_changed.emit(f, float(v)),
+                )
+            )
+            self._duck_widgets[field] = slider
+        self._duck_enabled.toggled.connect(
+            lambda checked: self.ducking_field_changed.emit("enabled", bool(checked))
+        )
+        duck_lay.addStretch(1)
+        outer.addWidget(self._ducking_box)
+        outer.addSpacing(10)
         # project render section
         render_box = QGroupBox("Project render")
         render_lay = QHBoxLayout(render_box)
@@ -1265,10 +1448,26 @@ class MixPage(QWidget):
             empty = QLabel("No timeline loaded.")
             empty.setObjectName("muted")
             self.strips_layout.addWidget(empty)
+            self.sync_ducking(None)
             return
         for track in document.tracks:
             strip = self._build_strip(track)
             self.strips_layout.addWidget(strip)
+        self.sync_ducking(document.ducking)
+
+    def sync_ducking(self, settings: dict | None) -> None:
+        """Push document ducking state into the widgets without re-emitting."""
+        enabled = bool(settings.get("enabled")) if settings else False
+        self._duck_enabled.blockSignals(True)
+        self._duck_enabled.setChecked(enabled)
+        self._duck_enabled.blockSignals(False)
+        for field, slider in self._duck_widgets.items():
+            value = settings.get(field) if settings else None
+            if value is None:
+                continue
+            slider.blockSignals(True)
+            slider.setValue(int(round(float(value))))
+            slider.blockSignals(False)
 
     def _build_strip(self, track: TrackState) -> QGroupBox:
         box = QGroupBox(track.name)
@@ -1392,7 +1591,13 @@ class ProvenancePage(QWidget):
         self.export_button = QPushButton("Render & export")
         self.export_button.setObjectName("primary")
         export_row.addWidget(self.export_button)
+        meta_row = QHBoxLayout()
+        self.metadata_check = QCheckBox("Write ID3 metadata + cover art (MP3 only)")
+        self.metadata_check.setChecked(True)
+        meta_row.addWidget(self.metadata_check)
+        meta_row.addStretch(1)
         outer.addWidget(export_box)
+        outer.addLayout(meta_row)
 
         actions = QHBoxLayout()
         self.verify_button = QPushButton("Verify fingerprint")
@@ -1569,6 +1774,11 @@ class ProvenancePage(QWidget):
                 self.library, item.id, output_dir, preset=preset,
                 container=container,
                 on_progress=progress,
+                embed_tags=(
+                    self.metadata_check.isChecked()
+                    if hasattr(self, "metadata_check")
+                    else True
+                ),
             )
         finally:
             for btn in (
@@ -1604,6 +1814,7 @@ class MainWindow(QMainWindow):
         self.generate_page = GeneratePage()
         self.batch_page = BatchPage(self.library)
         self.timeline_canvas = TimelineCanvas()
+        self.timeline_canvas.audio_path_resolver = self._resolve_clip_audio_path
         timeline_page = QWidget()
         timeline_layout = QVBoxLayout(timeline_page)
         timeline_layout.setContentsMargins(28, 24, 28, 24)
@@ -1621,10 +1832,20 @@ class MainWindow(QMainWindow):
         export_midi_btn = QPushButton("Export MIDI…")
         export_midi_btn.clicked.connect(self._on_export_midi)
         toolbar.addWidget(export_midi_btn)
+        self.snap_button = QPushButton("Snap 0.5s")
+        self.snap_button.setCheckable(True)
+        self.snap_button.setChecked(True)
+        self.snap_button.setToolTip(
+            "Snap drags, splits, pastes and arrow-key nudges to the grid (B toggles)"
+        )
+        self.snap_button.toggled.connect(
+            lambda checked: self.timeline_canvas.set_snap(checked)
+        )
+        toolbar.addWidget(self.snap_button)
         toolbar.addStretch(1)
         hint = QLabel(
-            "S = split · D = duplicate · C/V = copy/paste · "
-            "Ctrl+Z undoes · click clip to select"
+            "S split · D duplicate · C/V copy/paste · ←/→ nudge · "
+            "B snap · Ctrl+Z undo · click clip to select"
         )
         hint.setObjectName("muted")
         toolbar.addWidget(hint)
@@ -1706,7 +1927,10 @@ class MainWindow(QMainWindow):
 
         self.generate_page.generate_requested.connect(self._on_generate)
         self.generate_page.midi_generated.connect(self._on_midi_generated)
+        self.library_page.preview_requested.connect(self._on_library_preview)
+        self.library_page.remix_requested.connect(self._on_library_remix)
         self.mix_page.property_changed.connect(self._on_mix_property)
+        self.mix_page.ducking_field_changed.connect(self._on_ducking_field_changed)
         self.mix_page.mixdown_requested.connect(self._on_mixdown)
         self.mix_page.stems_requested.connect(self._on_stems)
         self.mix_page.track_selected.connect(self._on_mix_track_selected)
@@ -1717,6 +1941,7 @@ class MainWindow(QMainWindow):
         self.timeline_canvas.split_requested.connect(self._on_clip_split)
         self.timeline_canvas.duplicate_requested.connect(self._on_clip_duplicate)
         self.timeline_canvas.paste_requested.connect(self._on_clip_paste)
+        self.timeline_canvas.snap_changed.connect(self._on_snap_changed)
         # wire property panel
         self._clip_gain_slider.sliderReleased.connect(
             lambda: self._commit_clip_property(
@@ -1781,7 +2006,120 @@ class MainWindow(QMainWindow):
         self.refresh_timeline_view()
         self.statusBar().showMessage(f"{command.name} — Ctrl+Z to undo", 4000)
 
+    def _on_ducking_field_changed(self, field_name: str, value) -> None:
+        try:
+            command = SetDuckingCommand(field_name, value)
+        except ValidationError as exc:
+            self.statusBar().showMessage(str(exc), 6000)
+            return
+        self.commands.execute(command, self.document)
+        self.statusBar().showMessage(f"{command.name} — Ctrl+Z to undo", 4000)
+
     # ------------------------------------------------- playback plumbing
+
+    def _resolve_clip_audio_path(self, clip: Clip) -> str | None:
+        if clip.source_kind == "AUDIO_FILE" and clip.source_ref:
+            p = Path(clip.source_ref)
+            return str(p) if p.is_file() else None
+        if clip.source_kind == "GENERATED" and clip.source_ref:
+            for item in self.library.list_items(query=clip.source_ref):
+                if (
+                    item.fingerprint == clip.source_ref
+                    and item.path
+                    and Path(item.path).is_file()
+                ):
+                    return item.path
+        return None
+
+    def _on_library_preview(self, item_id: int) -> None:
+        try:
+            item = self.library.get(item_id)
+        except ValidationError as exc:
+            self.statusBar().showMessage(f"Preview: {exc}", 6000)
+            return
+        if item is None or not item.path:
+            self.statusBar().showMessage("No audio file for this item.", 5000)
+            return
+        path = Path(item.path)
+        if not path.is_file():
+            self.statusBar().showMessage(
+                f"Missing audio file: {item.path}", 6000
+            )
+            return
+        try:
+            import soundfile as sf
+
+            data, sr = sf.read(str(path), always_2d=True, dtype="float32")
+        except Exception as exc:  # pragma: no cover - defensive
+            self.statusBar().showMessage(f"Preview load failed: {exc}", 6000)
+            return
+        self._player.load(data.T, sr)
+        self.transport.set_range(max(1.0, self._player.duration_sec))
+        self.transport.set_position(0.0)
+        try:
+            self._player.play()
+        except AudioDeviceError as exc:
+            self.statusBar().showMessage(f"Playback: {exc}", 8000)
+            self.transport.play_button.setChecked(False)
+            return
+        self.transport.play_button.setChecked(True)
+        self._play_timer.start()
+        self.statusBar().showMessage(
+            f"Previewing: {item.title}", 4000
+        )
+
+    def _on_library_remix(self, item_id: int) -> None:
+        try:
+            item = self.library.get(item_id)
+        except ValidationError as exc:
+            self.statusBar().showMessage(f"Remix: {exc}", 6000)
+            return
+        if item is None:
+            return
+        title_hint = f"{item.title} (remix)"
+        if item.kind == "GENERATED":
+            try:
+                from dataclasses import asdict
+
+                from lfms.library.service import remix_params_from_item
+
+                params = remix_params_from_item(item)
+                payload = asdict(params)
+                payload["moods"] = tuple(payload["moods"])
+                if payload.get("energy_points"):
+                    payload["energy_points"] = tuple(
+                        tuple(pt) for pt in payload["energy_points"]
+                    )
+            except ValidationError as exc:
+                self.statusBar().showMessage(
+                    f"Cannot remix {item.title}: {exc}", 6000
+                )
+                return
+        elif item.path and Path(item.path).is_file():
+            try:
+                from lfms.reference import analyze_file, merge_into_payload
+
+                analysis = analyze_file(Path(item.path))
+            except Exception as exc:  # pragma: no cover - defensive
+                self.statusBar().showMessage(f"Remix analysis failed: {exc}", 6000)
+                return
+            base = {
+                "seed": int(item.seed or 0) or random.randrange(1, 2_147_483_000),
+                "genre": "AMBIENT",
+                "moods": ("NEUTRAL",),
+                "duration_sec": float(item.duration_sec or 60.0),
+                "intensity": 50.0,
+            }
+            payload = merge_into_payload(base, analysis)
+            payload["seed"] = random.randrange(1, 2_147_483_000)
+        else:
+            self.statusBar().showMessage("Nothing to remix.", 5000)
+            return
+        clip = self.generate_from_payload(payload, title=title_hint)
+        if clip is not None:
+            self.statusBar().showMessage(
+                f"Generated remix of {item.title} → {clip.label}", 8000
+            )
 
     def _on_play_toggled(self, playing: bool) -> None:
         status = self.statusBar()
@@ -1808,9 +2146,13 @@ class MainWindow(QMainWindow):
         self._play_timer.stop()
         self._player.stop()
         self.transport.set_position(0.0)
+        self.timeline_canvas.playhead_sec = None
+        self.timeline_canvas.update()
 
     def _poll_playback(self) -> None:
         self.transport.set_position(self._player.position_sec)
+        self.timeline_canvas.playhead_sec = self._player.position_sec
+        self.timeline_canvas.update()
         if not self._player.playing and not getattr(
             self._player, "playback_finished", False
         ):
@@ -1822,6 +2164,8 @@ class MainWindow(QMainWindow):
             self.transport.play_button.setChecked(False)
             self.transport.set_position(0.0)
             self._player.stop()
+            self.timeline_canvas.playhead_sec = None
+            self.timeline_canvas.update()
 
     def _undo(self) -> None:
         command = self.commands.undo(self.document)
@@ -1835,7 +2179,7 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(f"Redo: {command.name}")
             self.refresh_timeline_view()
 
-    def generate_from_payload(self, payload: dict) -> Clip | None:
+    def generate_from_payload(self, payload: dict, *, title: str | None = None) -> Clip | None:
         try:
             from lfms.generator.plan import params_from_payload
             params = params_from_payload(payload)
@@ -1849,7 +2193,7 @@ class MainWindow(QMainWindow):
             (clip.end_sec for clip in self.document.clips_on_track(track.track_id)),
             default=0.0,
         )
-        label = f"{humanize(params.genre)} {composition.fingerprint}"
+        label = title or f"{humanize(params.genre)} {composition.fingerprint}"
         clip = Clip(
             track_id=track.track_id,
             start_sec=start,
@@ -1879,6 +2223,7 @@ class MainWindow(QMainWindow):
         try:
             item = self.library.register_composition(
                 composition, params,
+                title=title,
                 audio_path=str(file_path) if file_path is not None else None,
                 extra_tags=tuple(
                     t for t in (getattr(self, "_active_reference_tag", ""),) if t
@@ -2013,6 +2358,15 @@ class MainWindow(QMainWindow):
         self.refresh_timeline_view()
         self.statusBar().showMessage(
             f"Clip split at {format_time(at_sec)} — Ctrl+Z to undo", 4000
+        )
+
+    def _on_snap_changed(self, enabled: bool, step: float) -> None:
+        from PySide6.QtCore import QSignalBlocker
+
+        with QSignalBlocker(self.snap_button):
+            self.snap_button.setChecked(enabled)
+        self.snap_button.setText(
+            f"Snap {step:.2g}s" if enabled else "Snap OFF"
         )
 
     def _on_clip_duplicate(self, clip_id: str) -> None:

@@ -205,6 +205,33 @@ class SetTrackPropertyCommand(Command):
         setattr(track, self.field_name, self.old_value)
 
 
+class SetDuckingCommand(Command):
+    _FIELDS = ("enabled", "threshold_db", "floor_db", "attack_ms", "release_ms", "range_db")
+
+    def __init__(self, field_name: str, new_value: object) -> None:
+        if field_name not in self._FIELDS:
+            raise ValidationError(f"cannot set ducking field {field_name!r}")
+        super().__init__(f"Set ducking {field_name}")
+        self.field_name = field_name
+        self.new_value = new_value
+        self.old_value: object = None
+        self._executed = False
+        from lfms.mixer.ducking import DuckingSettings
+
+        settings = DuckingSettings.from_dict({field_name: new_value})
+        self._validated = getattr(settings, field_name)
+
+    def do(self, document: TimelineDocument) -> None:
+        self.old_value = document.ducking.get(self.field_name)
+        document.ducking[self.field_name] = self._validated
+        self._executed = True
+
+    def undo(self, document: TimelineDocument) -> None:
+        if not self._executed:
+            raise ValidationError("command was never executed")
+        document.ducking[self.field_name] = self.old_value
+
+
 class AddMarkerCommand(Command):
     def __init__(self, marker: Marker) -> None:
         super().__init__(f"Add marker {marker.label!r}")

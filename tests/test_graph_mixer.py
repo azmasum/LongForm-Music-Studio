@@ -105,3 +105,53 @@ class TestGraphValidation:
     def test_strip_defaults(self) -> None:
         strip = TrackStrip("x", ToneSource(SR))
         assert strip.volume_db == 0.0 and not strip.mute and not strip.solo
+
+
+class TestSidechainDucking:
+    def test_voicover_ducking_reduces_music_between_vo(self) -> None:
+        from lfms.mixer import DuckingSettings, SidechainDucker
+
+        sr = SR
+        n = int(3.5 * sr)
+        vo = np.zeros((2, n), dtype=np.float32)
+        t = np.arange(int(1.0 * sr), dtype=np.float64) / sr
+        burst = (0.6 * np.sin(2 * np.pi * 300.0 * t)).astype(np.float32)
+        vo[:, int(1.5 * sr) : int(2.5 * sr)] = np.stack([burst, burst])
+
+        class _BufSource:
+            def __init__(self, data):
+                self.data = data
+                self.sample_rate = sr
+                self._pos = 0
+
+            def process(self, n_frames):  # noqa: N805
+                stop = min(self._pos + n_frames, self.data.shape[1])
+                block = self.data[:, self._pos : stop]
+                pad = n_frames - block.shape[1]
+                self._pos = stop
+                return block if pad == 0 else np.pad(block, ((0, 0), (0, pad)))
+
+        g = AudioGraph(sr)
+        g.create_track("bed", ToneSource(sr, frequency=450.0))
+        g.create_track("vo", _BufSource(vo), kind="VOICEOVER")
+        ducker = SidechainDucker(
+            sr,
+            DuckingSettings(threshold_db=-30.0, floor_db=-14.0, attack_ms=10.0),
+        )
+        g.mixer.ducker = ducker
+        out = _collect(g, 3.5).astype(float)
+
+        def bed_energy(seg):
+            return band_energy(out[0][seg], sr, 400, 500)
+
+        quiet_bed = bed_energy(slice(int(1.7 * sr), int(2.4 * sr)))
+        loud_bed = bed_energy(slice(int(0.1 * sr), int(1.0 * sr)))
+        assert quiet_bed < loud_bed * 0.5
+        recovered = bed_energy(slice(int(2.7 * sr), int(3.4 * sr)))
+        assert recovered > quiet_bed * 2.0
+
+    def test_ducking_wiring_keeps_strip_kind(self) -> None:
+        strip = TrackStrip("v", ToneSource(SR), kind="VOICEOVER")
+        assert strip.kind == "VOICEOVER"
+        plain = TrackStrip("m", ToneSource(SR))
+        assert plain.kind == "MUSIC"

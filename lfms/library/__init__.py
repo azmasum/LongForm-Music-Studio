@@ -4,6 +4,7 @@ from lfms.library.service import (
     LibraryService,
     humanized_stem,
     normalize_tag,
+    remix_params_from_item,
     smart_tags_for_generation,
     smart_tags_for_measurement,
 )
@@ -13,6 +14,7 @@ __all__ = [
     "LibraryService",
     "humanized_stem",
     "normalize_tag",
+    "remix_params_from_item",
     "smart_tags_for_generation",
     "smart_tags_for_measurement",
 ]

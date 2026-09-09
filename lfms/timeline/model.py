@@ -10,6 +10,7 @@ from dataclasses import dataclass, field, replace
 
 from lfms.core.errors import ProjectFileError, ValidationError
 from lfms.core.ids import new_id
+from lfms.mixer.ducking import DuckingSettings, ducking_defaults
 
 TRACK_KINDS = ("MUSIC", "AMBIENCE", "VOICEOVER", "REFERENCE")
 CLIP_SOURCE_KINDS = ("GENERATED", "AUDIO_FILE", "MIDI")
@@ -172,6 +173,7 @@ class TimelineDocument:
     lanes: list[AutomationLane] = field(default_factory=list)
     markers: list[Marker] = field(default_factory=list)
     fx_chains: list[FxChain] = field(default_factory=list)
+    ducking: dict = field(default_factory=ducking_defaults)
 
     # -- tracks ---------------------------------------------------------
     def add_track(self, track: TrackState) -> TrackState:
@@ -369,6 +371,7 @@ class TimelineDocument:
             ],
             "markers": [vars(marker) | {} for marker in self.markers],
             "fx_chains": [chain.to_dict() for chain in self.fx_chains],
+            "ducking": dict(self.ducking),
         }
 
     @classmethod
@@ -407,4 +410,8 @@ class TimelineDocument:
             document.add_marker(Marker(**raw))
         for raw in data.get("fx_chains", []):
             document.fx_chains.append(FxChain.from_dict(raw))
+        raw_ducking = data.get("ducking")
+        document.ducking = DuckingSettings.from_dict(
+            raw_ducking if isinstance(raw_ducking, dict) else None
+        ).to_dict()
         return document

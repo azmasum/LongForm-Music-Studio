@@ -19,6 +19,18 @@ def _check(name: str, value: float, lo: float, hi: float) -> float:
     return value
 
 
+def ducking_defaults() -> dict:
+    """Clean JSON-able defaults for a project's ducking configuration."""
+    return {
+        "enabled": False,
+        "threshold_db": -38.0,
+        "floor_db": -12.0,
+        "attack_ms": 40.0,
+        "release_ms": 600.0,
+        "range_db": 18.0,
+    }
+
+
 class DuckingSettings:
     """Sidechain response configuration."""
 
@@ -27,12 +39,14 @@ class DuckingSettings:
     def __init__(
         self,
         *,
+        enabled: bool = True,
         threshold_db: float = -38.0,
         floor_db: float = -12.0,
         attack_ms: float = 40.0,
         release_ms: float = 600.0,
         range_db: float = 18.0,
     ) -> None:
+        self.enabled = bool(enabled)
         self.threshold_db = _check("threshold_db", threshold_db, -80.0, 0.0)
         self.floor_db = _check("floor_db", floor_db, -48.0, 0.0)
         self.attack_ms = _check("attack_ms", attack_ms, 1.0, 500.0)
@@ -41,6 +55,28 @@ class DuckingSettings:
 
     def validate(self) -> None:  # kept for API symmetry
         return None
+
+    def to_dict(self) -> dict:
+        return {
+            "enabled": self.enabled,
+            "threshold_db": self.threshold_db,
+            "floor_db": self.floor_db,
+            "attack_ms": self.attack_ms,
+            "release_ms": self.release_ms,
+            "range_db": self.range_db,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict | None) -> DuckingSettings:
+        raw = dict(data or {})
+        return cls(
+            enabled=bool(raw.get("enabled", False)),
+            threshold_db=raw.get("threshold_db", -38.0),
+            floor_db=raw.get("floor_db", -12.0),
+            attack_ms=raw.get("attack_ms", 40.0),
+            release_ms=raw.get("release_ms", 600.0),
+            range_db=raw.get("range_db", 18.0),
+        )
 
 
 class SidechainDucker:

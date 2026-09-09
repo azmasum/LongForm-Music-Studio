@@ -218,8 +218,13 @@ def build_project_graph(
     *,
     only_track_id: str | None = None,
     master_volume_db: float = 0.0,
+    ducking: dict | None = None,
 ) -> AudioGraph:
     """Build a renderable graph for the whole document (or a single track).
+
+    When ``ducking`` is provided and marks ducking as enabled while the
+    document contains actual VOICEOVER clips, a sidechain ducker is attached
+    to the graph so music strips duck under the voiceover strips.
 
     Raises ValidationError when a GENERATED clip's fingerprint is missing
     from the library or an AUDIO_FILE clip's path no longer exists.
@@ -274,6 +279,7 @@ def build_project_graph(
             sequence,
             volume_db=track.volume_db,
             pan=track.pan,
+            kind=track.kind,
         )
         strip.mute = track.mute
         strip.solo = track.solo
@@ -303,6 +309,18 @@ def build_project_graph(
     if not graph.mixer.strips:
         raise ValidationError("selected track has no clips to render")
     graph.mixer.master_volume_db = master_volume_db
+    if ducking is not None:
+        from lfms.mixer.ducking import DuckingSettings, SidechainDucker
+
+        settings = DuckingSettings.from_dict(ducking)
+        if settings.enabled and any(
+            track.kind == "VOICEOVER"
+            and document.clips_on_track(track.track_id)
+            for track in tracks
+        ):
+            ducker = SidechainDucker(graph.sample_rate, settings)
+            ducker.reset()
+            graph.mixer.ducker = ducker
     return graph
 
 
@@ -333,10 +351,14 @@ def render_project_mixdown(
     bit_depth: int = 24,
     on_progress: Callable[[float], None] | None = None,
     should_cancel=None,
+    ducking: dict | None = None,
 ) -> ProjectRenderOutcome:
     """Render the full timeline to one file; optionally auto-master it.
 
     preset=None renders raw (no mastering), useful as a mix reference.
+    ``ducking`` (a config dict) enables voiceover sidechain ducking during
+    the mix when the document has VOICEOVER clips; defaults to the document's
+    own ducking config.
     """
     from lfms.core.errors import RenderCancelled
 
@@ -347,7 +369,9 @@ def render_project_mixdown(
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     check_cancel()
-    graph = build_project_graph(document, library)
+    graph = build_project_graph(
+        document, library, ducking=ducking if ducking is not None else document.ducking
+    )
     duration = content_duration_sec(document)
 
     class _JC(RenderJobControl):

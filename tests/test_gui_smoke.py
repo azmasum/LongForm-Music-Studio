@@ -19,6 +19,7 @@ if os.environ.get("LFMS_GUI_SMOKE") == "1":
 
     from lfms.app.main_window import MainWindow, TransportBar, format_time  # noqa: E402
     from lfms.provenance import verify_item  # noqa: E402
+    from lfms.timeline import AddClipCommand, Clip  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -103,6 +104,30 @@ def test_mix_page_edits_are_undoable(qapp, tmp_path):
     window.commands.undo(window.document)
     restored = next(t for t in window.document.tracks if t.track_id == track.track_id)
     assert restored.volume_db == pytest.approx(original_volume)
+    window.library.close()
+
+
+def test_mix_page_ducking_edits_are_undoable(qapp, tmp_path):
+    window = _make_window(tmp_path)
+    assert window.document.ducking["enabled"] is False
+
+    # toggle the physical checkbox -> command applied to the document
+    window.mix_page._duck_enabled.setChecked(True)
+    assert window.document.ducking["enabled"] is True
+
+    # slide a dial -> validated + applied
+    window.mix_page._duck_widgets["threshold_db"].setValue(-25)
+    assert window.document.ducking["threshold_db"] == pytest.approx(-25.0)
+    assert window.document.ducking["threshold_db"] != window.document.ducking["floor_db"]
+
+    # undo restores the previous value for the slider field (real Ctrl+Z path)
+    window._undo()
+    assert window.document.ducking["threshold_db"] == pytest.approx(-38.0)
+    # undo the checkbox back to disabled
+    window._undo()
+    assert window.document.ducking["enabled"] is False
+    # panel re-syncs to document state after undo
+    assert window.mix_page._duck_enabled.isChecked() is False
     window.library.close()
 
 
@@ -267,3 +292,233 @@ def test_transport_bar_labels(qapp):
     bar.set_position(90.0)
     assert "01:30" in bar.time_label.text()
     assert "10:00" in bar.time_label.text()
+
+
+class _StubPlayer:
+    def __init__(self):
+        self.loaded = False
+        self.duration_sec = 0.0
+        self.position_sec = 0.0
+        self.playing = False
+        self.data = None
+        self.sr = None
+
+    def load(self, data, sr):
+        self.loaded = True
+        self.data = data
+        self.sr = sr
+        self.duration_sec = 2.0
+
+    def play(self):
+        self.playing = True
+
+    def stop(self):
+        self.playing = False
+
+    def pause(self):
+        self.playing = False
+
+
+def test_library_preview_requested_emits_and_plays(qapp, tmp_path):
+    import numpy as np  # noqa: E402
+    import soundfile as sf  # noqa: E402
+
+    wav_path = tmp_path / "preview.wav"
+    sr = 44100
+    t = np.linspace(0.0, 1.0, sr, endpoint=False)
+    sf.write(str(wav_path), 0.25 * np.sin(2 * np.pi * 440.0 * t), sr)
+
+    window = _make_window(tmp_path)
+    stub = _StubPlayer()
+    window._player = stub
+    kept = window.library.add_item("Preview Tone", path=str(wav_path))
+    window.library_page.refresh()
+
+    # select the item -> play button becomes enabled
+    from PySide6.QtCore import Qt  # noqa: E402
+
+    page = window.library_page
+    for row_index in range(page.items.count()):
+        if page.items.item(row_index).data(Qt.UserRole) == kept.id:
+            page.items.setCurrentRow(row_index)
+            break
+    assert page.play_button.isEnabled()
+
+    # clicking emits preview_requested with the item id, driving the player
+    emitted = []
+    page.preview_requested.connect(lambda iid: emitted.append(iid))
+    page._play_selected()
+    assert emitted == [kept.id]
+    assert stub.loaded and stub.playing
+    assert stub.duration_sec == pytest.approx(2.0)
+    assert window.transport.play_button.isChecked()
+
+    # stop resets the transport button
+    window._on_transport_stop()
+    assert not stub.playing
+    window.library.close()
+
+
+def test_timeline_waveform_visualization(qapp, tmp_path):
+    import numpy as np  # noqa: E402
+    import soundfile as sf  # noqa: E402
+    from PySide6.QtGui import QImage  # noqa: E402
+
+    from lfms.timeline import AddClipCommand, Clip  # noqa: E402
+
+    wav_path = tmp_path / "tone.wav"
+    sr = 44100
+    t = np.linspace(0.0, 1.0, sr, endpoint=False)
+    sf.write(str(wav_path), 0.5 * np.sin(2 * np.pi * 440.0 * t), sr)
+
+    window = _make_window(tmp_path)
+    canvas = window.timeline_canvas
+
+    clip = Clip(
+        track_id=window.document.tracks[0].track_id,
+        start_sec=0.0,
+        duration_sec=1.0,
+        label="wave test",
+        source_kind="AUDIO_FILE",
+        source_ref=str(wav_path),
+    )
+
+    window.commands.execute(AddClipCommand(clip), window.document)
+    canvas.set_document(window.document)
+
+    # resolver returns the wav path
+    resolved = canvas.audio_path_resolver(clip)
+    assert resolved == str(wav_path)
+
+    # _ensure_waveform loads peaks from the wav file
+    peaks = canvas._ensure_waveform(clip)
+    assert peaks is not None
+    assert len(peaks) > 0
+    assert any(p > 0.0 for p in peaks)
+
+    # second call returns cached
+    peaks2 = canvas._ensure_waveform(clip)
+    assert peaks2 is peaks
+
+    # painting does not crash (offscreen)
+    image = QImage(canvas.size(), QImage.Format_ARGB32)
+    image.fill(0)
+    canvas.render(image)
+    window.library.close()
+
+
+def test_library_remix_flow(qapp, tmp_path, monkeypatch):
+    window = _make_window(tmp_path)
+    window.generate_page.set_output_dir(tmp_path)
+    window.generate_from_payload(
+        {
+            "seed": 20260909,
+            "genre": "LOFI",
+            "moods": ("DREAMY",),
+            "duration_sec": 10.0,
+            "intensity": 30.0,
+        }
+    )
+    item = window.library.list_items()[0]
+    assert item.kind == "GENERATED"
+
+    page = window.library_page
+    page.refresh()
+    from PySide6.QtCore import Qt  # noqa: E402
+
+    for row_index in range(page.items.count()):
+        if page.items.item(row_index).data(Qt.UserRole) == item.id:
+            page.items.setCurrentRow(row_index)
+            break
+    assert page.remix_button.isEnabled()
+
+    emitted = []
+    page.remix_requested.connect(lambda iid: emitted.append(iid))
+    page._remix_selected()
+    assert emitted == [item.id]
+
+    # remix re-generation uses the item's style with a fresh seed
+    calls = []
+    monkeypatch.setattr(
+        window,
+        "generate_from_payload",
+        lambda payload, *, title=None: calls.append((payload, title)),
+    )
+    window._on_library_remix(item.id)
+    assert len(calls) == 1
+    payload, title = calls[0]
+    assert payload["seed"] != item.seed
+    assert payload["genre"].upper() == "LOFI"
+    assert payload["duration_sec"] == pytest.approx(10.0)
+    assert title.startswith(item.title)
+    window.library.close()
+
+
+def test_timeline_snap_and_nudge(qapp, tmp_path):
+    window = _make_window(tmp_path)
+    canvas = window.timeline_canvas
+    track = window.document.tracks[0]
+    clip = Clip(
+        track_id=track.track_id,
+        start_sec=1.0,
+        duration_sec=1.0,
+        label="nudge",
+        source_kind="GENERATED",
+        source_ref="fp-x",
+    )
+    window.commands.execute(AddClipCommand(clip), window.document)
+    canvas.set_document(window.document)
+
+    # snap grid rounding
+    assert canvas.snap_enabled is True
+    assert canvas.snap_time(2.37) == pytest.approx(2.5)
+    assert canvas.snap_time(2.24) == pytest.approx(2.0)
+    canvas.set_snap(False)
+    assert canvas.snap_time(2.37) == pytest.approx(2.37)
+    assert canvas._nudge_step() == pytest.approx(0.25)
+    canvas.set_snap(True)
+    assert canvas._nudge_step() == pytest.approx(0.5)
+
+    # snap toggle button stays in sync with the canvas
+    window._on_snap_changed(False, 0.5)
+    assert window.snap_button.isChecked() is False
+    assert window.snap_button.text() == "Snap OFF"
+    window._on_snap_changed(True, 0.5)
+    assert window.snap_button.isChecked() is True
+
+    # arrow nudge emits clip_moved with a snapped target
+    from PySide6.QtCore import Qt  # noqa: E402
+    from PySide6.QtGui import QKeyEvent  # noqa: E402
+
+    canvas.set_snap(True)
+    canvas.selected_clip_id = clip.clip_id
+    moved = []
+    canvas.clip_moved.connect(lambda cid, start: moved.append((cid, start)))
+    event = QKeyEvent(QKeyEvent.KeyPress, Qt.Key_Right, Qt.NoModifier)
+    canvas.keyPressEvent(event)
+    assert moved == [(clip.clip_id, 1.5)]
+    left = QKeyEvent(QKeyEvent.KeyPress, Qt.Key_Left, Qt.NoModifier)
+    canvas.keyPressEvent(left)
+    assert moved[-1] == (clip.clip_id, 1.0)
+
+    # snap-off nudge moves by 0.25s
+    canvas.set_snap(False)
+    canvas.keyPressEvent(left)
+    assert moved[-1] == (clip.clip_id, 0.75)
+    window.library.close()
+
+
+def test_timeline_playhead_paints(qapp, tmp_path):
+    from PySide6.QtGui import QImage
+
+    window = _make_window(tmp_path)
+    canvas = window.timeline_canvas
+    canvas.playhead_sec = 2.0
+    canvas.set_document(window.document)
+    image = QImage(canvas.size(), QImage.Format_ARGB32)
+    image.fill(0)
+    canvas.render(image)
+    assert canvas.playhead_sec == 2.0
+    window._on_transport_stop()
+    assert canvas.playhead_sec is None
+    window.library.close()

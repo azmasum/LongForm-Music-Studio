@@ -86,6 +86,34 @@ def test_invalid_property_field_rejected():
         SetTrackPropertyCommand("TRK-x", "color", 3)
 
 
+def test_set_ducking_command_undo_redo():
+    from lfms.timeline import SetDuckingCommand
+
+    doc = TimelineDocument()
+    assert doc.ducking["enabled"] is False
+    stack = CommandStack()
+    stack.execute(SetDuckingCommand("enabled", True), doc)
+    assert doc.ducking["enabled"] is True
+    stack.execute(SetDuckingCommand("threshold_db", -25.0), doc)
+    assert doc.ducking["threshold_db"] == pytest.approx(-25.0)
+    stack.undo(doc)
+    assert doc.ducking["threshold_db"] == pytest.approx(-38.0)
+    stack.undo(doc)
+    assert doc.ducking["enabled"] is False
+    assert stack.next_redo_name == "Set ducking enabled"
+    stack.redo(doc)
+    assert doc.ducking["enabled"] is True
+
+
+def test_set_ducking_command_validates_range():
+    from lfms.timeline import SetDuckingCommand
+
+    with pytest.raises(ValidationError):
+        SetDuckingCommand("threshold_db", 20.0)
+    with pytest.raises(ValidationError):
+        SetDuckingCommand("unknown_field", 1)
+
+
 def test_marker_commands_roundtrip():
     doc = TimelineDocument()
     marker = Marker(time_sec=42.0, label="Drop")
