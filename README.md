@@ -4,9 +4,10 @@ Professional desktop application for creating **long-form background music**
 (10–120+ minutes) for YouTube, documentary, educational, meditation and podcast
 video creators. Offline-first, copyright-aware, built for Windows.
 
-> **Status: v1.2.0 — 15 instruments, reference-inspired generation, clean
-> limiter audio; all 14 roadmap phases complete.**
-> The full MVP loop works end-to-end and is covered by 387 automated tests
+> **Status: v1.4.1 — creator workflow pack (library preview, clip waveforms,
+> remix/variation, VO ducking, ID3 tags + cover art, timeline snap/playhead)
+> plus piercing-transient audio fix; all 14 roadmap phases complete.**
+> The full MVP loop works end-to-end and is covered by 502 automated tests
 > (unit, integration, performance budgets, crash-recovery drills, offscreen
 > GUI). See [ROADMAP.md](ROADMAP.md) for the phase-by-phase record; features
 > marked below reflect what exists today — nothing is claimed as working
