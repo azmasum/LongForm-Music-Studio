@@ -6,6 +6,22 @@ All notable changes are documented here. Format based on
 
 ### Fixed
 
+### 1.4.2 — Shrill high melody notes capped for calm genres
+
+Calm-genre tracks (meditation/relaxation/ambient/calm/nature) could still
+throw piercing highs in the middle of the piece: degree walks, OCTAVE_UP
+motif transforms and DEVELOPMENT-section +12 shifts pushed the lead to
+midi 84–97 (C6–C#7) — shrill pluck/bell/marimba notes over a quiet bed
+that made listeners skip.
+
+- **Lead register cap for calm genres**: melody never exceeds G5 (midi 79)
+  — applied in the generator, after chord snapping, and after arranger
+  octave shifts.
+- **Sparkle bell cap for calm genres**: never exceeds C6 (midi 84).
+- **Energetic genres untouched**: full register preserved (covered by test).
+- Regression tests assert the caps across seeds plus the untouched
+  energetic range.
+
 ### 1.4.1 — In-the-middle piercing squeaks removed
 
 Meditation/relaxation/ambient tracks (and any arrangement using plucks or

@@ -118,3 +118,33 @@ def test_different_seed_changes_events():
         for role in ("MELODY", "BASS", "SPARKLE")
     )
     assert differs
+
+
+@pytest.mark.parametrize("genre", ["AMBIENT", "CALM", "MEDITATION", "RELAXATION", "NATURE"])
+def test_calm_genres_never_go_shrill(genre):
+    """Lead ≤ G5 and sparkle ≤ C6 for calm genres across seeds (no piercing)."""
+    from lfms.generator.melody import CALM_MELODY_CEILING, CALM_SPARKLE_CEILING
+
+    for seed in (1, 7, 42, 99, 2024, 20260911):
+        composition = Composer(
+            _params(seed=seed, genre=genre, duration_sec=600.0)
+        ).compose()
+        for event in composition.roles.get("MELODY", []):
+            assert event.midi <= CALM_MELODY_CEILING, (genre, seed, event.midi)
+        for event in composition.roles.get("SPARKLE", []):
+            assert event.midi <= CALM_SPARKLE_CEILING, (genre, seed, event.midi)
+
+
+def test_energetic_genres_keep_full_register():
+    """The calm cap must not dull energetic genres; cap helper is a no-op."""
+    from lfms.generator.melody import cap_register
+
+    assert cap_register(96, "ELECTRONIC", 79) == 96
+    assert cap_register(96, "MEDITATION", 79) == 79
+    highs = []
+    for seed in (1, 7, 42, 99, 2024, 20260911):
+        composition = Composer(
+            _params(seed=seed, genre="ELECTRONIC", duration_sec=600.0)
+        ).compose()
+        highs.extend(e.midi for e in composition.roles.get("MELODY", []))
+    assert max(highs) > 79

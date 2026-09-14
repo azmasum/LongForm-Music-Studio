@@ -27,7 +27,7 @@ from lfms.generator.composer import (
 )
 from lfms.generator.events import ChordSegment, Composition, NoteEvent
 from lfms.generator.harmony import HarmonyGenerator
-from lfms.generator.melody import MelodyGenerator
+from lfms.generator.melody import CALM_MELODY_CEILING, MelodyGenerator, cap_register
 from lfms.generator.plan import GenerationParameters, MusicPlan
 
 _DEFAULT_LONG_CURVE = "DOCUMENTARY"
@@ -93,7 +93,17 @@ class Arranger:
                 events = _thin(events, keep=0.55 + 0.45 * span.energy, seed=plan.seed, index=index)
                 shift = _octave_shift(span, plan.seed)
                 if shift:
-                    events = [replace(event, midi=event.midi + shift) for event in events]
+                    events = [
+                        replace(
+                            event,
+                            midi=cap_register(
+                                event.midi + shift,
+                                plan.genre,
+                                CALM_MELODY_CEILING,
+                            ),
+                        )
+                        for event in events
+                    ]
                 collected.setdefault("MELODY", []).extend(
                     (span.start_sec, event) for event in events
                 )

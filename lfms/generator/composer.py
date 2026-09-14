@@ -11,6 +11,7 @@ import numpy as np
 
 from lfms.core.seed import SeedSystem
 from lfms.generator.events import ChordSegment, Composition, NoteEvent
+from lfms.generator.melody import CALM_SPARKLE_CEILING, cap_register
 from lfms.generator.plan import GenerationParameters, MusicPlan, build_plan
 from lfms.generator.theory import voicing_for_chord
 
@@ -126,6 +127,9 @@ class SparkleGenerator:
                 np.ceil((self.plan.register_center + 14 - top_pc) / 12.0)
             )
             sparkle_midi = int(np.clip(sparkle_midi, self.plan.register_center + 7, 96))
+            sparkle_midi = cap_register(
+                sparkle_midi, self.plan.genre, CALM_SPARKLE_CEILING
+            )
             offset = float(self._rng.uniform(0.1, 0.6)) * segment.duration_sec
             start = min(segment.start_sec + offset, segment.end_sec - 0.05)
             if start <= segment.start_sec:

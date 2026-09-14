@@ -37,6 +37,23 @@ _STEPS = (-2, -1, -1, 0, 1, 1, 2)
 _TRANSFORMS = ("NONE", "SHIFT_UP", "SHIFT_DOWN", "OCTAVE_UP", "ERODE")
 _TRANSFORM_WEIGHTS = (0.45, 0.18, 0.15, 0.12, 0.10)
 
+# Calm genres must never throw shrill, piercing highs over a quiet bed:
+# degree walks (+OCTAVE_UP transforms) and arranger octave shifts can push
+# the lead past C6, which reads as a sharp, irritating squeak in the middle
+# of a meditation/relaxation track and makes listeners skip. Cap the lead
+# (G5) and sparkle bells (C6) for these genres; energetic genres keep their
+# full range.
+_CALM_GENRES = frozenset({"AMBIENT", "CALM", "MEDITATION", "RELAXATION", "NATURE"})
+CALM_MELODY_CEILING = 79
+CALM_SPARKLE_CEILING = 84
+
+
+def cap_register(midi: int, genre: str, ceiling: int) -> int:
+    """Clamp a lead/sparkle pitch for calm genres; others untouched."""
+    if str(genre).upper() in _CALM_GENRES:
+        return min(int(midi), int(ceiling))
+    return int(midi)
+
 
 def rhythm_pool(density: float) -> list[tuple[float, ...]]:
     if density < 0.33:
@@ -122,6 +139,7 @@ class MelodyGenerator:
                 is_strong = abs(beats_from_start - round(beats_from_start)) < 0.05
                 if is_strong:
                     midi = self._snap_to_chord(midi, segment.pitch_classes)
+                midi = cap_register(midi, self.plan.genre, CALM_MELODY_CEILING)
                 velocity = 68.0 + float(self._rng.uniform(-9.0, 9.0))
                 if abs(beats_from_start - round(beats_from_start)) < 0.02:
                     velocity += 8.0
